@@ -1,0 +1,110 @@
+# cloud.deepseek.toml — DeepSeek as the cloud fallback preset for the
+# `openai_compat` backend (SPEC-inference.md §2.2).
+#
+# Invariants this file encodes (see CONFIG.md §10 and SPEC.md A6):
+#   * cloud is OFF by default            -> [cloud] enabled = false
+#   * every call needs a per-task grant  -> requires_task_consent = true
+#   * the grant dies with the task       -> ttl = "task_lifetime"
+#   * no original images leave the box   -> send_original_image = false
+#   * no credential is stored here       -> credentials_env names an env var only
+#
+# Enabling cloud is a two-step, per-task action:
+#   1. the teacher turns on the global switch in the settings page
+#      (`privacy.cloud_enabled` in CONFIG.md §10) and exports
+#      DEEPSEEK_API_KEY in the environment that launches the app;
+#   2. for each task, the app asks for an explicit TaskConsent (scope, budget).
+# A task without a valid consent must produce zero cloud requests. On any
+# cloud failure the task fails explicitly; it is never retried against a
+# different backend behind the user's back.
+
+schema_version = 1
+kind = "cloud_provider_preset"
+
+[cloud]
+# Global switch. false = the backend is not instantiable at all.
+enabled = false
+# Per-task grant is mandatory and is not configurable (SPEC-inference.md §2.3).
+requires_task_consent = true
+provider = "deepseek"
+protocol = "openai_compat"
+display_name = "DeepSeek（云端兜底）"
+
+[endpoint]
+# OpenAI-compatible base URL. The client appends /chat/completions.
+# Note: no trailing /v1 — DeepSeek serves the OpenAI routes directly here.
+base_url = "https://api.deepseek.com"
+chat_completions_path = "/chat/completions"
+models_path = "/models"
+# Name of the environment variable that holds the credential. The value is
+# read at call time from the platform credential store; never written to disk,
+# never logged, and never included in diagnostics bundles (SPEC-platform.md).
+credentials_env = "DEEPSEEK_API_KEY"
+# Anthropic-compatible endpoint is also offered upstream, unused here.
+anthropic_base_url = "https://api.deepseek.com/anthropic"
+
+[model]
+# Current documented id (2026-11-02). Serves DeepSeek-V4.1-Flash-1017.
+name = "deepseek-flash"
+served_versions = ["DeepSeek-V4.1-Flash-1017"]
+# 1M context, up to 384K output per the official model list. Our own
+# max_tokens below is deliberately far smaller: a judge reply is a small JSON.
+context_window = 1048576
+max_output_tokens = 393216
+input_modalities = ["text", "image"]
+output_modalities = ["text"]
+json_output = true
+tool_calls = true
+# Legacy ids still accepted upstream (mapped to V4.1-Flash, Flash pricing).
+legacy_names = ["deepseek-v4-flash", "deepseek-v4-flash-vision-exp"]
+
+[request]
+# Receive-side budgets for a single cloud call. Kept shorter than the local
+# judge budget of 20 s because a cloud round trip is not on the hot path.
+timeout_s = 120
+connect_timeout_s = 10
+# A judge reply is a bounded object; 1024 is generous for JudgeOutcome.
+max_tokens = 1024
+temperature = 0.0
+# DeepSeek supports JSON output; the app still validates the schema itself
+# because model output is untrusted input (SPEC-inference.md §3.3).
+response_format = "json_object"
+stream = false
+max_retries = 2
+retry_backoff_ms = 500
+
+[consent]
+# What a TaskConsent may cover. Roles are the SPEC-inference.md §2.1 roles.
+allowed_roles = ["judge", "structurer"]
+ttl = "task_lifetime"
+# Cap for one task, in micro-CNY (1_000_000 = 1 CNY). Exceeding it stops
+# further cloud calls for that task; already spent calls stay accounted.
+budget_micros_per_task = 2000000
+# SPEC.md A6 / CONFIG.md §10: original page images never leave the machine
+# unless the consent explicitly widens the scope, which the default forbids.
+send_original_image = false
+# Scopes that may be sent by default: cropped answer regions and text only.
+allowed_scopes = ["text_redacted", "answer_crop"]
+
+[pricing]
+# Per million tokens, CNY, from the official "模型 & 价格" page on 2026-11-02.
+# Idle hours are half price; Beijing time Mon-Fri 09:00-12:00 and 14:00-18:00
+# (excluding public holidays) are peak. Used only for the cost ledger.
+currency = "CNY"
+unit = "per_million_tokens"
+input_cache_miss_idle = 1.0
+input_cache_miss_peak = 2.0
+input_cache_hit_idle = 0.02
+input_cache_hit_peak = 0.04
+output_idle = 4.0
+output_peak = 8.0
+concurrency_limit = 2500
+
+[fallback]
+# The only allowed behaviour when the cloud call cannot complete.
+policy = "explicit_failure"
+# Never silently switch backend, never silently retry on the local model, and
+# never downgrade a schema failure to an unvalidated answer.
+silent_downgrade = false
+# After the budget is exhausted or the consent ends, further calls are refused
+# before the HTTP request is made (zero outbound requests).
+refuse_before_request = true

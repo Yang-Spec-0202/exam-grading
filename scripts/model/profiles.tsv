@@ -1,0 +1,19 @@
+# exam-grading llama-server profiles -- read by serve.sh / health.sh
+#
+# Tab separated. '#' lines are comments. One row per registry model id.
+#
+#  1 id          must match a model id in registry.tsv
+#  2 role        ocr | judge
+#  3 port        loopback port for llama-server (127.0.0.1 only)
+#  4 ctx         context size (-c) in tokens
+#  5 temp        default sampling temperature (--temp); 0 for reproducibility
+#  6 extra_args  extra llama-server flags, or '-' for none
+#
+# Ports are per model so two roles (or two OCR candidates) can run side by side.
+# Override any value at run time: PORT=9001 ./serve.sh start ocr
+paddleocr-vl-1.6	ocr	8081	8192	0.0	-
+paddleocr-vl-1.6-q4	ocr	8086	8192	0.0	-
+glm-ocr	ocr	8083	8192	0.0	-
+xiaomi-ocr-0	ocr	8084	8192	0.0	-
+qwen3.5-4b-instruct	judge	8082	8192	0.0	--chat-template-kwargs {"enable_thinking":false}
+h2o-lightning-4b	judge	8085	8192	0.0	--chat-template-kwargs {"enable_thinking":false}

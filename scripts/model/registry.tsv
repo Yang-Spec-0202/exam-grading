@@ -1,0 +1,31 @@
+# exam-grading local model registry (download manifest) -- read by pull.sh / verify.sh
+#
+# Tab separated. '#' lines are comments. One row per downloadable file.
+#
+#  1 id            registry model id (also the on-disk directory name)
+#  2 role          ocr | judge                       (SPEC-inference.md §2.1)
+#  3 component     model | mmproj                    (mmproj rows are optional)
+#  4 repo          Hugging Face repo id (no endpoint prefix)
+#  5 remote_file   path inside the repo
+#  6 local_file    file name written under <MODELS_DIR>/<id>/
+#  7 bytes         exact size in bytes (checked before hashing)
+#  8 sha256        SHA-256 of the file (source: HF LFS ETag / x-linked-etag)
+#  9 license       SPDX-ish id; must clear the whitelist in defaults.conf
+# 10 support       verified | unverified  (llama.cpp compatibility, not legality)
+# 11 notes         free text, no tabs
+#
+# Weights are NEVER committed. Destination is the user data directory:
+#   ~/Library/Application Support/exam-grading/models/<id>/
+#
+# Hashes captured 2026-11-02 from the Hugging Face API (x-linked-etag on the
+# resolve URL). Re-check with scripts/model/verify.sh before trusting a file.
+paddleocr-vl-1.6	ocr	model	PaddlePaddle/PaddleOCR-VL-1.6-GGUF	PaddleOCR-VL-1.6-GGUF.gguf	model.gguf	935769056	f3ae46ec885050acf4b3d31944431e1fd90d50664fb09126af4a3c050ba14ee8	Apache-2.0	verified	default OCR (CONFIG ocr.model); llama.cpp PR#18825
+paddleocr-vl-1.6	ocr	mmproj	PaddlePaddle/PaddleOCR-VL-1.6-GGUF	PaddleOCR-VL-1.6-GGUF-mmproj.gguf	mmproj.gguf	881770560	204d757d7610d9b3faab10d506d69e5b244e32bf765e2bab2d0167e65e0a058a	Apache-2.0	verified	vision projector; required with the above
+paddleocr-vl-1.6-q4	ocr	model	LunarOilRig/PaddleOCR-VL-1.6-GGUF-Q4	PaddleOCR-VL-1.6-Q4_K_M.gguf	model.gguf	300219360	d79bfabcb904eaf078f1f8a9a4bfd865f0ad6cda17b6441df7ce4bdf641a2651	Apache-2.0	verified	optional compact OCR: third-party Q4_K_M quant; loads and OCRs in llama.cpp 0.8.0
+paddleocr-vl-1.6-q4	ocr	mmproj	LunarOilRig/PaddleOCR-VL-1.6-GGUF-Q4	mmproj-Q8_0.gguf	mmproj.gguf	597565600	cc4e8e42afe3b45e40168eb4769aad8b491c5fb7aaca937d8e9746f5f0e6f425	Apache-2.0	verified	Q8_0 vision projector paired with the Q4 quant
+glm-ocr	ocr	model	ggml-org/GLM-OCR-GGUF	GLM-OCR-Q8_0.gguf	model.gguf	950433408	45bc244a6446aff850521dc41f18bc8d7105ad5f0c2c8c28af04e7cc4f4d50b1	MIT	verified	alt OCR; only Q8_0 published; llama.cpp PR#19677
+glm-ocr	ocr	mmproj	ggml-org/GLM-OCR-GGUF	mmproj-GLM-OCR-Q8_0.gguf	mmproj.gguf	484403648	9c4b58e33e316ed142eb5dcb41abec3844d3e6e5dc361ffb782c3fa9d175141f	MIT	verified	vision projector for glm-ocr
+xiaomi-ocr-0	ocr	model	prithivMLmods/Xiaomi-OCR-0-GGUF	Xiaomi-OCR-0.Q4_K_M.gguf	model.gguf	529297664	1e497ff06b91a3d822c543066df3e9ef69c62c5423be09d739dfa1db55630d3a	Apache-2.0	verified	alt OCR (formula-first): loads in llama.cpp but emits plain-text formulas, not LaTeX
+xiaomi-ocr-0	ocr	mmproj	prithivMLmods/Xiaomi-OCR-0-GGUF	Xiaomi-OCR-0.mmproj-bf16.gguf	mmproj.gguf	207346624	634d6bc95781ebf4a3f06570a59859fa5082d488db540fd474bc6b4061aec90e	Apache-2.0	verified	vision projector for xiaomi-ocr-0
+qwen3.5-4b-instruct	judge	model	unsloth/Qwen3.5-4B-GGUF	Qwen3.5-4B-Q4_K_M.gguf	model.gguf	2740937888	00fe7986ff5f6b463e62455821146049db6f9313603938a70800d1fb69ef11a4	Apache-2.0	verified	default judge (4B instruct Q4, restricted JSON output); no mmproj (text only)
+h2o-lightning-4b	judge	model	h2oai/h2o-lightning-4b-gguf	h2o-lightning-4b-Q4_K_M.gguf	model.gguf	2708808736	5ec969c6edbad5f1750141742f635cc7f01576bf9432151f730f0a6c30042768	Apache-2.0	verified	alt judge; official h2oai GGUF, typed-decision model, needs decision-style prompts
