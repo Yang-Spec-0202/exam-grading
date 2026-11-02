@@ -1,0 +1,47 @@
+# exam-grading .gitignore
+# 原则（SPEC.md 跨模块不变量 + CONFIG.md 隐私默认离线）：
+# 1) 不提交任何模型权重、原图、运行日志或数据库；
+# 2) 夹具只提交脱敏后的期望结果，原始扫描件留在本地；
+# 3) 本地开发产物（构建、书籍渲染、缓存）一律忽略。
+
+# ---------- Rust 构建产物 ----------
+target/
+**/*.rs.bk
+*.pdb
+
+# ---------- 模型权重（体积大且受许可限制，按 CONFIG 下载到用户数据目录） ----------
+models/
+*.gguf
+*.ggml
+*.safetensors
+*.onnx
+*.bin.part
+
+# ---------- 运行产物：日志 / 数据库 / 备份（SPEC-platform.md） ----------
+logs/
+*.log
+*.sqlite3*
+*.db-wal
+*.db-shm
+backups/
+
+# ---------- 夹具：原始学生作业扫描件不入库（脱敏后仅保留夹具结构与期望输出） ----------
+fixtures/**/raw/
+fixtures/**/private/
+
+# ---------- 文档构建输出（mdBook 产物；docs/book/src 是 scripts/docs.sh 生成并入库的内容） ----------
+docs/book/book/
+
+# ---------- 本地环境与密钥（API Key 只从环境变量读取，SPEC-inference.md） ----------
+.env
+.env.*
+*.pem
+*.key
+secrets.toml
+
+# ---------- 系统与编辑器 ----------
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp

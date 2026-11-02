@@ -1,0 +1,69 @@
+# exam-grading workspace
+#
+# 规范来源：SPEC.md §4（技术栈）、§6（项目结构）、§10（边界）；
+# 依赖方向：CAPABILITY-MAP.md §2/§3（单向、禁止环，app 为组合根）。
+# 质量门禁：cargo fmt / clippy / test / deny，见 scripts/ci.sh。
+
+[workspace]
+resolver = "3"
+members = [
+    "crates/eg-domain",
+    "crates/eg-platform",
+    "crates/eg-capture",
+    "crates/eg-inference",
+    "crates/eg-recognize",
+    "crates/eg-align",
+    "crates/eg-rubric",
+    "crates/eg-grade",
+    "crates/eg-subject-math",
+    "crates/eg-review",
+    "crates/eg-report",
+    "crates/eg-app",
+    "crates/egctl",
+]
+
+[workspace.dependencies]
+# 内部 crate 统一在此声明：路径 + 版本同时给出。
+# 只写 path 会被 cargo-deny 视作通配符依赖（deny.toml 的 bans.wildcards = "deny"）；
+# 版本号跟随 [workspace.package].version 一起升级。
+eg-domain = { path = "crates/eg-domain", version = "0.1.0" }
+eg-platform = { path = "crates/eg-platform", version = "0.1.0" }
+eg-capture = { path = "crates/eg-capture", version = "0.1.0" }
+eg-inference = { path = "crates/eg-inference", version = "0.1.0" }
+eg-recognize = { path = "crates/eg-recognize", version = "0.1.0" }
+eg-align = { path = "crates/eg-align", version = "0.1.0" }
+eg-rubric = { path = "crates/eg-rubric", version = "0.1.0" }
+eg-grade = { path = "crates/eg-grade", version = "0.1.0" }
+eg-subject-math = { path = "crates/eg-subject-math", version = "0.1.0" }
+eg-review = { path = "crates/eg-review", version = "0.1.0" }
+eg-report = { path = "crates/eg-report", version = "0.1.0" }
+eg-app = { path = "crates/eg-app", version = "0.1.0" }
+egctl = { path = "crates/egctl", version = "0.1.0" }
+
+[workspace.package]
+# M0 版本先占位 0.1.0；发布节奏在 M10 的发布任务中确定。
+version = "0.1.0"
+edition = "2024"
+# MSRV：立项时 stable（1.99）向下兼容 2 个小版本，见 docs/dev/research/toolchain.md。
+rust-version = "1.97"
+# 单机桌面应用，不分发到 crates.io。
+publish = false
+
+[workspace.lints.rust]
+# 规范：SPEC.md §7「库 crate 禁止 unsafe」。
+unsafe_code = "forbid"
+# 公开 API 必须有文档注释（SPEC.md §7）。
+missing_docs = "warn"
+unreachable_pub = "warn"
+missing_debug_implementations = "warn"
+
+[workspace.lints.clippy]
+# 严格模式：SPEC.md §10 的 clippy -D warnings。
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+# 规范：库 crate 禁止 unwrap/expect/panic（测试可局部 allow，SPEC.md §7）。
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+dbg_macro = "deny"
+todo = "warn"

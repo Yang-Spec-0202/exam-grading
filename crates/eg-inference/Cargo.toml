@@ -1,0 +1,13 @@
+[package]
+name = "eg-inference"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+description = "推理后端抽象、模型注册表、健康、预算、许可门禁、按任务鉴权"
+
+[lints]
+workspace = true
+
+[dependencies]
+eg-platform = { workspace = true }

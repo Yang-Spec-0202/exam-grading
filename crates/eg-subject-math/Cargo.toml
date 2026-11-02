@@ -1,0 +1,13 @@
+[package]
+name = "eg-subject-math"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+description = "数学学科包：归一化、比较器链、分步给分、CAS 适配"
+
+[lints]
+workspace = true
+
+[dependencies]
+eg-domain = { workspace = true }

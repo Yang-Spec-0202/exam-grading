@@ -1,0 +1,16 @@
+[package]
+name = "eg-app"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+description = "Slint 桌面外壳与组合根"
+
+[lints]
+workspace = true
+
+[dependencies]
+eg-platform = { workspace = true }
+eg-inference = { workspace = true }
+eg-review = { workspace = true }
+eg-report = { workspace = true }

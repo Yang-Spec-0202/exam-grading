@@ -1,0 +1,16 @@
+[package]
+name = "eg-review"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+description = "复核工作台视图模型与命令（改分、批注、抽检、审计）"
+
+[lints]
+workspace = true
+
+[dependencies]
+eg-domain = { workspace = true }
+eg-grade = { workspace = true }
+eg-capture = { workspace = true }
+eg-recognize = { workspace = true }

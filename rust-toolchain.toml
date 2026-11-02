@@ -1,0 +1,9 @@
+# Rust 工具链固定入口（官方格式，见 rustup book 的 Overrides 一节：
+# https://rust-lang.github.io/rustup/overrides.html#the-toolchain-file ）。
+#
+# 通道用 stable：与 SPEC.md §4「Rust edition 2024, stable」一致；
+# 实测版本记录在 docs/dev/research/toolchain.md（改动时同步更新）。
+[toolchain]
+channel = "stable"
+profile = "default"
+components = ["rustfmt", "clippy"]

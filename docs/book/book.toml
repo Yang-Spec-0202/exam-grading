@@ -1,0 +1,29 @@
+# mdBook 配置（GitHub Pages 目标）
+#
+# 依据：mdBook 0.5.4 官方文档
+#   - 通用配置 https://rust-lang.github.io/mdBook/format/configuration/general.html
+#   - HTML 渲染器 https://rust-lang.github.io/mdBook/format/configuration/renderers.html
+# 注意：mdBook 0.5 起配置中的未知字段会直接报错，只使用官方列出的字段。
+#
+# 构建方式：`bash scripts/docs.sh`
+#   docs/user、docs/dev、docs/adr、docs/changelog.md 是唯一内容源；
+#   脚本把它们复制到本目录的 src/（已 gitignore）后执行 mdbook build。
+#
+# 发布：GitHub Pages 项目站点地址形如 https://<owner>.github.io/<repo>/，
+#   因此 site-url 必须与仓库名一致；仓库改名时同步修改此处。
+
+[book]
+title = "exam-grading 文档"
+authors = ["exam-grading 项目"]
+description = "自动作业批改系统（exam-grading）的用户、开发者、研究与决策文档"
+language = "zh-CN"
+src = "src"
+
+[build]
+build-dir = "book"
+# 章节必须真实存在：缺页时报错而不是静默创建空文件（与文档门禁一致）。
+create-missing = false
+
+[output.html]
+# 项目站点根路径；仓库名变更时同步修改。
+site-url = "/exam-grading/"

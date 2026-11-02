@@ -1,0 +1,60 @@
+# cargo-deny 配置（工具版本实测 cargo-deny 0.20.2，2026-11-02）
+#
+# 依据：
+# - SPEC.md §10「新增依赖过 cargo deny（许可白名单 MIT/Apache-2.0/BSD-3/ISC/Unicode-3.0）」
+# - 官方配置文档：https://embarkstudios.github.io/cargo-deny/checks/licenses/cfg.html
+#   （licenses 段；0.20 的 `version` 字段已废弃，未知字段会报错）
+# - 默认模板由 `cargo deny init`（0.20.2）生成后按项目裁剪。
+#
+# 原则：fail-closed —— 未显式允许的许可一律拒绝；未知 registry/git 来源一律拒绝。
+# 新增依赖时若触发许可拒绝，先确认许可真实性，再决定：
+#   1) 在此白名单加 SPDX 标识（需在 docs/dev/research/ 记录理由），或
+#   2) 换成许可合规的替代 crate。
+
+[graph]
+# 不限制 target：桌面包将来可能跨平台构建，许可/来源检查应覆盖所有平台依赖。
+all-features = false
+no-default-features = false
+
+[output]
+feature-depth = 1
+
+[advisories]
+# 安全公告库使用默认官方源（https://github.com/rustsec/advisory-db）。
+# 确有不可避免的公告时，在此按 id 忽略并写明 reason；禁止无理由长期忽略。
+ignore = []
+
+[licenses]
+# SPEC.md §10 许可白名单（SPDX 标识，大小写与拼写必须精确）。
+# 注意：带例外的许可（如 "Apache-2.0 WITH LLVM-exception"）视为不同许可，
+# 需要单独列出；未列出即拒绝（fail-closed）。
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-3.0",
+]
+# 从 LICENSE 文件识别许可时的置信度门槛，使用官方默认值 0.8。
+confidence-threshold = 0.8
+
+[licenses.private]
+# 本仓库所有 crate 均 publish = false，不对外分发，不需要许可声明。
+ignore = true
+registries = []
+
+[bans]
+# 同一 crate 多版本并存只告警：体积/攻击面需人工判断，不阻断本地 CI。
+multiple-versions = "warn"
+# 禁止 `*` 通配版本依赖：版本必须可复现（SPEC.md §9.5 版本以实测为准）。
+wildcards = "deny"
+highlight = "all"
+workspace-default-features = "allow"
+external-default-features = "allow"
+
+[sources]
+# 只允许 crates.io 官方索引；git 依赖默认禁止（任何联网/新后端需 Ask first）。
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []

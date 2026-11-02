@@ -1,0 +1,68 @@
+# CI：代码质量门禁（与 scripts/ci.sh 等价）
+#
+# 依据：SPEC.md §10 边界、tasks/todo.md T03。
+# 说明：工作流使用公开 Action 的次版本标签（actions/checkout@v7 等），
+#       版本核对日期 2026-11-02，见 docs/dev/research/toolchain.md。
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: fmt / clippy / test / deny
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v7
+
+      - name: 安装 Rust（stable + rustfmt + clippy）
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: cargo fmt
+        run: cargo fmt --all -- --check
+
+      - name: cargo clippy（-D warnings）
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+
+      - name: cargo test
+        run: cargo test --workspace
+
+      - name: cargo deny（许可/公告/来源/禁用项）
+        uses: EmbarkStudios/cargo-deny-action@v2
+
+  docs:
+    name: 文档门禁（死链 + 规范无代码 + mdBook 构建）
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v7
+
+      - name: 安装 mdBook 0.5.4（官方 release，版本固定）
+        run: |
+          curl -sSL -o mdbook.tar.gz \
+            https://github.com/rust-lang/mdBook/releases/download/v0.5.4/mdbook-v0.5.4-x86_64-unknown-linux-gnu.tar.gz
+          tar xzf mdbook.tar.gz
+          sudo install -m 0755 mdbook /usr/local/bin/mdbook
+          mdbook --version
+
+      - name: 文档门禁
+        run: bash scripts/docs-check.sh
+
+      - name: 校验书籍生成结果与提交内容一致
+        run: |
+          if [ -n "$(git status --porcelain -- docs/book/src)" ]; then
+            echo "docs/book/src 与 docs/ 的生成结果不一致：" >&2
+            echo "请执行 bash scripts/docs.sh 并提交 docs/book/src 的变更。" >&2
+            git status --porcelain -- docs/book/src >&2
+            exit 1
+          fi
+          echo "OK：docs/book/src 与 docs/ 一致"

@@ -1,0 +1,13 @@
+[package]
+name = "eg-platform"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+description = "配置、密钥、数据库、资产库、持久任务、日志、审计、单实例、崩溃恢复"
+
+[lints]
+workspace = true
+
+[dependencies]
+eg-domain = { workspace = true }

@@ -1,0 +1,15 @@
+[package]
+name = "eg-recognize"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+description = "页面到区块结构化、Schema 校验、缓存与置信度"
+
+[lints]
+workspace = true
+
+[dependencies]
+eg-domain = { workspace = true }
+eg-platform = { workspace = true }
+eg-inference = { workspace = true }

@@ -1,0 +1,59 @@
+# 发布 mdBook 静态站到 GitHub Pages
+#
+# 依据：SPEC.md §9 文档系统、CONFIG.md 的 docs.publish（GitHub Pages）。
+# 前置：仓库 Settings → Pages → Source 选择 "GitHub Actions"。
+# 注意：docs/book/book.toml 的 site-url 必须与仓库名一致（项目站点形如 /<repo>/）。
+name: Docs
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: 构建 mdBook
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v7
+
+      - name: 安装 mdBook 0.5.4（官方 release，版本固定）
+        run: |
+          curl -sSL -o mdbook.tar.gz \
+            https://github.com/rust-lang/mdBook/releases/download/v0.5.4/mdbook-v0.5.4-x86_64-unknown-linux-gnu.tar.gz
+          tar xzf mdbook.tar.gz
+          sudo install -m 0755 mdbook /usr/local/bin/mdbook
+          mdbook --version
+
+      - name: 文档门禁与构建
+        run: bash scripts/docs-check.sh
+
+      - name: 配置 Pages
+        uses: actions/configure-pages@v6
+
+      - name: 上传静态站产物
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: docs/book/book
+
+  deploy:
+    name: 部署 GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: 部署
+        id: deployment
+        uses: actions/deploy-pages@v5

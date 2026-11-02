@@ -1,0 +1,12 @@
+[package]
+name = "egctl"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+description = "诊断、夹具回放与基准命令行"
+
+[lints]
+workspace = true
+
+[dependencies]

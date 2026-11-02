@@ -1,0 +1,12 @@
+[package]
+name = "eg-domain"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+description = "领域类型、不变量、分数与证据模型、学科契约、规则草稿（纯类型，零 IO）"
+
+[lints]
+workspace = true
+
+[dependencies]

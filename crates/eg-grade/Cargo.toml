@@ -1,0 +1,17 @@
+[package]
+name = "eg-grade"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+description = "两层判分、模式、置信度门禁、冲突仲裁、证据"
+
+[lints]
+workspace = true
+
+[dependencies]
+eg-domain = { workspace = true }
+eg-align = { workspace = true }
+eg-rubric = { workspace = true }
+eg-inference = { workspace = true }
+eg-subject-math = { workspace = true }
