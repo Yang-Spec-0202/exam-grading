@@ -17,6 +17,7 @@
 - [研究记录约定](dev/research/README.md)
 - [工具链与 workspace 配置（M0）](dev/research/toolchain.md)
 - [全国卷数学模板数据（M5 数据）](dev/research/templates.md)
+- [本地推理模型获取、校验与 serving（M0）](dev/research/models.md)
 
 # 架构决策
 
