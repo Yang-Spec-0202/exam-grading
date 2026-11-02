@@ -10,4 +10,13 @@ description = "推理后端抽象、模型注册表、健康、预算、许可�
 workspace = true
 
 [dependencies]
+chrono = "0.4"
+eg-domain = { workspace = true }
 eg-platform = { workspace = true }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+toml = "1"
+
+[dev-dependencies]
+tempfile = "3"

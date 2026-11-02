@@ -1,0 +1,51 @@
+schema_version = 1
+template_id = "custom-multi-v1"
+set_id = "custom-multi"
+display_name = "自定义多选模板"
+subject = "math"
+paper_style = "new-gaokao"
+status = "active"
+version = "2026.1"
+snapshot_year = 2026
+snapshot_label = "教师自定义多选模板（读取兼容 part_choice 档位演示）"
+total_score_milli = 6000
+question_count = 1
+structure_note = "1 道多选（6 分，2 个正确选项）"
+structure_confidence = "high"
+score_split_confidence = "high"
+
+[provenance]
+verified_at = "2026-11-02"
+confidence = "medium"
+basis = "teacher-custom"
+source_ids = ["C1"]
+disclaimer = "教师自定义模板；档位口径由教师确认，模板仅提供骨架。"
+
+[[questions]]
+ordinal = 1
+label = "1"
+kind = "多选"
+max_score_milli = 6000
+skeleton = "objective-multi"
+
+[skeletons.objective-multi]
+scoring_mode = "按选项部分给分"
+label = "多选·部分给分"
+scoring_note = "全部选对 6 分；选对 1 个 2 分；有错选 0 分"
+[[skeletons.objective-multi.items]]
+ordinal = 1
+criterion = "【模板骨架】全部选对得满分；有错选 0 分"
+ratio_permille = 1000
+required = true
+depends_on = []
+placeholder = true
+
+[skeletons.objective-multi.partial_choice]
+correct_option_count = 2
+wrong_selection_zero = true
+source = "template_data"
+source_note = "自定义模板档位（教师月考口径）"
+
+[[skeletons.objective-multi.partial_choice.tiers]]
+selected_correct = 1
+points_milli = 2000

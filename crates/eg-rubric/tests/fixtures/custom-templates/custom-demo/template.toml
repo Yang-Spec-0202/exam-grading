@@ -1,0 +1,40 @@
+schema_version = 1
+template_id = "custom-demo-v1"
+set_id = "custom-demo"
+display_name = "自定义演示模板"
+subject = "math"
+paper_style = "new-gaokao"
+status = "active"
+version = "2026.1"
+snapshot_year = 2026
+snapshot_label = "教师自定义单题模板（用于导入校验演示）"
+total_score_milli = 10000
+question_count = 1
+structure_note = "1 道单选（10 分）"
+structure_confidence = "high"
+score_split_confidence = "high"
+
+[provenance]
+verified_at = "2026-11-02"
+confidence = "high"
+basis = "inferred"
+source_ids = ["C1"]
+disclaimer = "教师自定义模板，不含题目原文；骨架为通用占位，须教师确认。"
+
+[[questions]]
+ordinal = 1
+label = "1"
+kind = "单选"
+max_score_milli = 10000
+skeleton = "objective-single"
+
+[skeletons.objective-single]
+scoring_mode = "全对才给分"
+label = "单选·全对"
+[[skeletons.objective-single.items]]
+ordinal = 1
+criterion = "【模板骨架】选出唯一正确选项，与答案键一致"
+ratio_permille = 1000
+required = true
+depends_on = []
+placeholder = true

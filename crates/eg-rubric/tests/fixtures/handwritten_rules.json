@@ -1,0 +1,118 @@
+{
+  "rules": [
+    {
+      "name": "单选·全对才给分",
+      "kind": "single_choice",
+      "max_score_milli": 5000,
+      "mode": "all_or_nothing",
+      "items": [{ "criterion": "选出唯一正确选项，与答案键一致", "points": 5000, "required": true, "depends_on": [] }],
+      "expect": { "errors": [], "warnings": [] }
+    },
+    {
+      "name": "判断·全对才给分",
+      "kind": "true_false",
+      "max_score_milli": 5000,
+      "mode": "all_or_nothing",
+      "items": [{ "criterion": "判断结果与答案键一致", "points": 5000, "required": true, "depends_on": [] }],
+      "expect": { "errors": [], "warnings": [] }
+    },
+    {
+      "name": "填空·全对才给分",
+      "kind": "fill_in_blank",
+      "max_score_milli": 5000,
+      "mode": "all_or_nothing",
+      "items": [{ "criterion": "填入结果与答案键等价（含单位与取值范围）", "points": 5000, "required": true, "depends_on": [] }],
+      "expect": { "errors": [], "warnings": [] }
+    },
+    {
+      "name": "计算·累加两步",
+      "kind": "calculation",
+      "max_score_milli": 3000,
+      "mode": "additive",
+      "items": [
+        { "criterion": "列出方程或不等式", "points": 1500, "required": false, "depends_on": [] },
+        { "criterion": "解得 x=2", "points": 1500, "required": false, "depends_on": [] }
+      ],
+      "expect": { "errors": [], "warnings": [] }
+    },
+    {
+      "name": "解答·分步给分含依赖",
+      "kind": "calculation",
+      "max_score_milli": 13000,
+      "mode": "stepwise",
+      "items": [
+        { "criterion": "关键建模与转化正确", "points": 3900, "required": false, "depends_on": [] },
+        { "criterion": "主要运算过程正确", "points": 5200, "required": false, "depends_on": [1] },
+        { "criterion": "最终结论正确且符合题意", "points": 3900, "required": false, "depends_on": [2] }
+      ],
+      "expect": { "errors": [], "warnings": [] }
+    },
+    {
+      "name": "证明·分步给分",
+      "kind": "proof",
+      "max_score_milli": 15000,
+      "mode": "stepwise",
+      "items": [
+        { "criterion": "明确已知与求证并完成关键构造", "points": 4500, "required": false, "depends_on": [] },
+        { "criterion": "推理链条完整、每步有依据", "points": 6000, "required": false, "depends_on": [1] },
+        { "criterion": "结论规范并回扣题意", "points": 4500, "required": false, "depends_on": [2] }
+      ],
+      "expect": { "errors": [], "warnings": [] }
+    },
+    {
+      "name": "多选·三选项部分给分",
+      "kind": "multiple_choice",
+      "max_score_milli": 6000,
+      "mode": "partial_choice",
+      "items": [{ "criterion": "全部选对得满分；有错选 0 分", "points": 6000, "required": true, "depends_on": [] }],
+      "partial_choice": {
+        "correct_option_count": 3,
+        "tiers": [
+          { "selected_correct": 1, "points": 2000, "label": "选对 1 个" },
+          { "selected_correct": 2, "points": 4000, "label": "选对 2 个" }
+        ],
+        "wrong_selection_zero": true,
+        "source": "official",
+        "source_note": "2026 年全国卷评分细则",
+        "total_milli": 6000
+      },
+      "expect": { "errors": [], "warnings": [] }
+    },
+    {
+      "name": "多选·两选项部分给分",
+      "kind": "multiple_choice",
+      "max_score_milli": 6000,
+      "mode": "partial_choice",
+      "items": [{ "criterion": "全部选对得满分；有错选 0 分", "points": 6000, "required": true, "depends_on": [] }],
+      "partial_choice": {
+        "correct_option_count": 2,
+        "tiers": [{ "selected_correct": 1, "points": 3000, "label": "选对 1 个" }],
+        "wrong_selection_zero": true,
+        "source": "official",
+        "source_note": "2025 年全国卷评分细则",
+        "total_milli": 6000
+      },
+      "expect": { "errors": [], "warnings": [] }
+    },
+    {
+      "name": "计算·判据含公式与 LaTeX 描述",
+      "kind": "calculation",
+      "max_score_milli": 12000,
+      "mode": "additive",
+      "items": [
+        { "criterion": "正确写出判别式 Δ=b²-4ac 并说明符号", "points": 4000, "required": true, "depends_on": [] },
+        { "criterion": "求出两根 x=(−b±√Δ)/(2a)", "points": 5000, "required": false, "depends_on": [] },
+        { "criterion": "结论写成区间或集合形式", "points": 3000, "required": false, "depends_on": [] }
+      ],
+      "expect": { "errors": [], "warnings": [] }
+    },
+    {
+      "name": "计算·长判据文本",
+      "kind": "calculation",
+      "max_score_milli": 2000,
+      "mode": "all_or_nothing",
+      "items": [{ "criterion": "本题为开放性设问：只要学生给出至少一种自洽的建模路径（例如设元、列式、构造函数或分类讨论），关键中间结论正确，且最终结论在题目允许的范围内（含单位、取值范围与必要的取舍说明），即可判定为满足；若仅写出结论而无过程，则不得分。", "points": 2000, "required": true, "depends_on": [] }],
+      "expect": { "errors": [], "warnings": [] }
+    }
+  ]
+}

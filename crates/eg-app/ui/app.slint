@@ -1,0 +1,580 @@
+// eg-app 主窗口（`SPEC-app.md` §2/§3）：
+// 只做声明式绑定与极薄转发——所有中文文案、状态与格式化都来自 Rust 侧属性；
+// 本文件禁止业务逻辑、IO 与中文字面量（门禁单测扫描）。
+
+import { Button, ComboBox, HorizontalBox, LineEdit, ScrollView, VerticalBox } from "std-widgets.slint";
+
+export struct NavEntry {
+    id: string,
+    title: string,
+    shortcut: string,
+}
+
+export struct PageContent {
+    title: string,
+    subtitle: string,
+    body: string,
+    action-label: string,
+}
+
+export struct PageLabels {
+    save-setting: string,
+    setting-key-hint: string,
+    setting-value-hint: string,
+    review-score: string,
+    image-evidence: string,
+    sampling-title: string,
+    sampling-single: string,
+    sampling-whole: string,
+    rule-criterion-hint: string,
+    rule-points-hint: string,
+    rule-handwritten: string,
+    consent-task-hint: string,
+    consent-backend-hint: string,
+    consent-scope-hint: string,
+    consent-budget-hint: string,
+    consent-ttl-hint: string,
+    consent-register: string,
+}
+
+export struct ActionItem {
+    id: string,
+    label: string,
+    enabled: bool,
+}
+
+export struct ToastItem {
+    serial: int,
+    level: string,
+    title: string,
+    body: string,
+}
+
+export struct ConfirmContent {
+    title: string,
+    body: string,
+    yes-label: string,
+    no-label: string,
+}
+
+export component AppWindow inherits Window {
+    in property <string> app-title;
+    in property <[NavEntry]> nav-entries;
+    in property <int> current-index: 0;
+    in property <PageContent> page;
+    in property <string> mode-label;
+    in property <string> mode-switch-label;
+    in property <bool> fast-mode;
+    in property <bool> backend-ok;
+    in property <string> backend-text;
+    in property <string> status-left;
+    in property <string> channel-text;
+    in property <string> hint;
+    in property <string> progress-text;
+    in property <[ToastItem]> toasts;
+    in property <string> error-title;
+    in property <string> error-summary;
+    in property <string> error-detail;
+    in property <string> error-diagnostic-id;
+    in property <string> error-show-detail;
+    in property <string> error-hide-detail;
+    in property <string> error-retry;
+    in property <string> error-copy;
+    in property <ConfirmContent> confirm-content;
+    in property <string> open-settings;
+    in property <string> open-logs;
+    in property <string> log-placeholder;
+    in property <[ActionItem]> page-actions;
+    in property <bool> import-page;
+    in property <bool> progress-page;
+    in property <bool> settings-page;
+    in property <bool> review-page;
+    in property <bool> rules-page;
+    in property <bool> consent-page;
+    in property <bool> diagnostics-page;
+    in-out property <string> setting-key;
+    in-out property <string> setting-value;
+    in-out property <string> review-score;
+    in-out property <string> rule-criterion;
+    in-out property <string> rule-points;
+    in-out property <string> consent-task;
+    in-out property <string> consent-backend;
+    in-out property <string> consent-scope;
+    in-out property <string> consent-budget;
+    in-out property <string> consent-ttl;
+    in property <bool> sampling-visible;
+    in property <[string]> review-reasons;
+    in property <PageLabels> page-labels;
+    in property <string> about-title;
+    in property <string> about-body;
+    in property <bool> show-about;
+    in property <bool> fast-enabled;
+    in property <bool> retry-enabled;
+    in property <string> dismiss-symbol;
+    in property <string> startup-error-help;
+    in property <bool> startup-error;
+    in property <string> quit-label;
+    in-out property <bool> error-visible: false;
+    in-out property <bool> error-detail-visible: false;
+    in-out property <bool> confirm-visible: false;
+
+    callback navigate(int);
+    callback shortcut(string, bool, bool, bool, bool) -> bool;
+    callback primary-action();
+    callback page-action(string);
+    callback apply-setting(string, string);
+    callback review-score-changed(string);
+    callback review-reason-changed(string);
+    callback sampling-scope(string);
+    callback rules-handwritten(string, string);
+    callback consent-register(string, string, string, string, string);
+    callback toggle-mode();
+    callback open-settings-clicked();
+    callback open-logs-clicked();
+    callback retry-error();
+    callback toggle-error-detail();
+    callback copy-diagnostic-id();
+    callback dismiss-toast(int);
+    callback confirm-yes();
+    callback confirm-no();
+    callback quit();
+
+    title: app-title;
+    width: 1180px;
+    height: 760px;
+
+    public function take-focus() {
+        shortcuts.focus();
+    }
+
+    VerticalLayout {
+        // 顶栏：标题 + 模式徽标 + 后端状态 + 全局入口
+        Rectangle {
+            height: 52px;
+            background: #f3f4f7;
+            HorizontalLayout {
+                padding-left: 16px;
+                padding-right: 16px;
+                spacing: 10px;
+                alignment: center;
+                Text {
+                    text: root.app-title;
+                    font-size: 18px;
+                    font-weight: 700;
+                    vertical-alignment: center;
+                    min-width: 160px;
+                }
+                Rectangle {
+                    height: 26px;
+                    width: 110px;
+                    border-radius: 13px;
+                    background: root.fast-mode ? #ffe6c7 : #dfe7ff;
+                    Text {
+                        text: root.mode-label;
+                        font-size: 12px;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                        x: 0;
+                        y: 0;
+                        width: 100%;
+                        height: 100%;
+                    }
+                }
+                Button {
+                    text: root.mode-switch-label;
+                    clicked => { root.toggle-mode(); }
+                }
+                Rectangle { }
+                Rectangle {
+                    height: 26px;
+                    width: 150px;
+                    border-radius: 13px;
+                    background: root.backend-ok ? #d8f3dc : #f1f2f4;
+                    Text {
+                        text: root.backend-text;
+                        font-size: 12px;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                        x: 0;
+                        y: 0;
+                        width: 100%;
+                        height: 100%;
+                    }
+                }
+                Button {
+                    text: root.open-settings;
+                    clicked => { root.open-settings-clicked(); }
+                }
+                Button {
+                    text: root.open-logs;
+                    clicked => { root.open-logs-clicked(); }
+                }
+            }
+        }
+
+        // 错误横幅：中文摘要 + 可展开详情 + 诊断 id + 重试
+        if (root.error-visible) : Rectangle {
+            background: #fff1f0;
+            border-width: 1px;
+            border-color: #f3b7b0;
+            VerticalLayout {
+                padding: 10px;
+                spacing: 6px;
+                Text {
+                    text: root.error-title + " · " + root.error-summary;
+                    font-weight: 600;
+                    color: #8a1f11;
+                    wrap: word-wrap;
+                }
+                HorizontalLayout {
+                    spacing: 8px;
+                    Button {
+                        text: root.error-detail-visible ? root.error-hide-detail : root.error-show-detail;
+                        clicked => { root.toggle-error-detail(); }
+                    }
+                    Button {
+                        text: root.error-retry;
+                        enabled: root.retry-enabled;
+                        clicked => { root.retry-error(); }
+                    }
+                    Button {
+                        text: root.error-copy;
+                        clicked => { root.copy-diagnostic-id(); }
+                    }
+                    Text {
+                        text: root.error-diagnostic-id;
+                        vertical-alignment: center;
+                        font-size: 12px;
+                        color: #6b6b6b;
+                    }
+                }
+                if (root.error-detail-visible) : Text {
+                    text: root.error-detail;
+                    wrap: word-wrap;
+                    font-size: 12px;
+                    color: #5a5a5a;
+                }
+                Text {
+                    text: root.startup-error-help;
+                    wrap: word-wrap;
+                    font-size: 11px;
+                    color: #8a5a12;
+                }
+                if (root.startup-error) : Button {
+                    text: root.quit-label;
+                    clicked => { root.quit(); }
+                }
+            }
+        }
+
+        // 二次确认条（模式切换 / 离开未保存页）
+        if (root.confirm-visible) : Rectangle {
+            background: #fffbe6;
+            border-width: 1px;
+            border-color: #e6d08a;
+            VerticalLayout {
+                padding: 10px;
+                spacing: 6px;
+                Text {
+                    text: root.confirm-content.title;
+                    font-weight: 600;
+                }
+                Text {
+                    text: root.confirm-content.body;
+                    wrap: word-wrap;
+                    font-size: 12px;
+                }
+                HorizontalLayout {
+                    spacing: 8px;
+                    Button {
+                        text: root.confirm-content.yes-label;
+                        clicked => { root.confirm-yes(); }
+                    }
+                    Button {
+                        text: root.confirm-content.no-label;
+                        clicked => { root.confirm-no(); }
+                    }
+                }
+            }
+        }
+
+        // 主体：左侧十页导航 + 右侧页面骨架（页面内容占位，后续任务填充）
+        HorizontalLayout {
+            // 导航
+            Rectangle {
+                width: 220px;
+                background: #fafafc;
+                border-width: 1px;
+                border-color: #e6e6ea;
+                VerticalLayout {
+                    padding: 10px;
+                    spacing: 4px;
+                    Text {
+                        text: root.app-title;
+                        font-size: 12px;
+                        color: #8a8a8a;
+                        height: 22px;
+                    }
+                    for entry[idx] in root.nav-entries : Rectangle {
+                        height: 38px;
+                        border-radius: 6px;
+                        background: idx == root.current-index ? #e1e7ff : transparent;
+                        HorizontalLayout {
+                            padding-left: 10px;
+                            padding-right: 10px;
+                            spacing: 8px;
+                            alignment: center;
+                            Text {
+                                text: entry.title;
+                                font-size: 14px;
+                                vertical-alignment: center;
+                                horizontal-stretch: 1;
+                                color: idx == root.current-index ? #1a3fb8 : #2b2b2b;
+                            }
+                            Text {
+                                text: entry.shortcut;
+                                font-size: 11px;
+                                color: #9a9a9a;
+                                vertical-alignment: center;
+                            }
+                        }
+                        TouchArea {
+                            x: 0;
+                            y: 0;
+                            width: 100%;
+                            height: 100%;
+                            clicked => { root.navigate(idx); }
+                        }
+                    }
+                    Rectangle { }
+                }
+            }
+
+            // 页面骨架
+            ScrollView {
+                VerticalLayout {
+                    padding: 20px;
+                    spacing: 10px;
+                    Text {
+                        text: root.page.title;
+                        font-size: 22px;
+                        font-weight: 700;
+                    }
+                    Text {
+                        text: root.page.subtitle;
+                        font-size: 13px;
+                        color: #6b6b6b;
+                        wrap: word-wrap;
+                    }
+                    Rectangle {
+                        height: 1px;
+                        background: #e6e6ea;
+                    }
+                    Text {
+                        text: root.page.body;
+                        wrap: word-wrap;
+                        font-size: 13px;
+                        color: #3a3a3a;
+                    }
+                    Button {
+                        text: root.page.action-label;
+                        clicked => { root.primary-action(); }
+                    }
+                    if (root.page-actions.length > 0) : HorizontalLayout {
+                        spacing: 8px;
+                        for action[idx] in root.page-actions : Button {
+                            text: action.label;
+                            enabled: action.enabled;
+                            clicked => { root.page-action(action.id); }
+                        }
+                    }
+                    // 设置页：单键编辑（key + value → 保存）
+                    if (root.settings-page) : HorizontalLayout {
+                        spacing: 6px;
+                        LineEdit {
+                            text <=> root.setting-key;
+                            placeholder-text: root.page-labels.setting-key-hint;
+                            width: 260px;
+                        }
+                        LineEdit {
+                            text <=> root.setting-value;
+                            placeholder-text: root.page-labels.setting-value-hint;
+                            width: 160px;
+                        }
+                        Button {
+                            text: root.page-labels.save-setting;
+                            clicked => { root.apply-setting(root.setting-key, root.setting-value); }
+                        }
+                    }
+                    // 复核页：改分输入 + 原因 + 抽检范围
+                    if (root.review-page) : VerticalLayout {
+                        spacing: 6px;
+                        HorizontalLayout {
+                            spacing: 6px;
+                            Text { text: root.page-labels.review-score; vertical-alignment: center; }
+                            LineEdit {
+                                text <=> root.review-score;
+                                width: 120px;
+                                edited(text) => { root.review-score-changed(text); }
+                            }
+                            ComboBox {
+                                model: root.review-reasons;
+                                current-index: 0;
+                                selected(value) => { root.review-reason-changed(value); }
+                            }
+                            Text { text: root.page-labels.image-evidence; color: #6b6b6b; font-size: 11px; }
+                        }
+                        if (root.sampling-visible) : HorizontalLayout {
+                            spacing: 6px;
+                            Text { text: root.page-labels.sampling-title; vertical-alignment: center; }
+                            Button { text: root.page-labels.sampling-single; clicked => { root.sampling-scope("single"); } }
+                            Button { text: root.page-labels.sampling-whole; clicked => { root.sampling-scope("paper"); } }
+                        }
+                    }
+                    // 规则页：手写直译草稿输入
+                    if (root.rules-page) : HorizontalLayout {
+                        spacing: 6px;
+                        LineEdit {
+                            text <=> root.rule-criterion;
+                            placeholder-text: root.page-labels.rule-criterion-hint;
+                            width: 320px;
+                        }
+                        LineEdit {
+                            text <=> root.rule-points;
+                            placeholder-text: root.page-labels.rule-points-hint;
+                            width: 110px;
+                        }
+                        Button {
+                            text: root.page-labels.rule-handwritten;
+                            clicked => { root.rules-handwritten(root.rule-criterion, root.rule-points); }
+                        }
+                    }
+                    // 授权页：新建授权表单
+                    if (root.consent-page) : VerticalLayout {
+                        spacing: 6px;
+                        HorizontalLayout {
+                            spacing: 6px;
+                            LineEdit { text <=> root.consent-task; placeholder-text: root.page-labels.consent-task-hint; width: 220px; }
+                            LineEdit { text <=> root.consent-backend; placeholder-text: root.page-labels.consent-backend-hint; width: 130px; }
+                            LineEdit { text <=> root.consent-scope; placeholder-text: root.page-labels.consent-scope-hint; width: 180px; }
+                            LineEdit { text <=> root.consent-budget; placeholder-text: root.page-labels.consent-budget-hint; width: 90px; }
+                            LineEdit { text <=> root.consent-ttl; placeholder-text: root.page-labels.consent-ttl-hint; width: 80px; }
+                            Button {
+                                text: root.page-labels.consent-register;
+                                clicked => { root.consent-register(root.consent-task, root.consent-backend, root.consent-scope, root.consent-budget, root.consent-ttl); }
+                            }
+                        }
+                    }
+                    if (root.show-about) : Rectangle {
+                        background: #f8f9fb;
+                        border-radius: 6px;
+                        VerticalLayout {
+                            padding: 12px;
+                            spacing: 6px;
+                            Text {
+                                text: root.about-title;
+                                font-weight: 600;
+                            }
+                            Text {
+                                text: root.about-body;
+                                wrap: word-wrap;
+                                font-size: 12px;
+                                color: #4a4a4a;
+                            }
+                        }
+                    }
+                    Text {
+                        text: root.log-placeholder;
+                        font-size: 12px;
+                        color: #8a8a8a;
+                        wrap: word-wrap;
+                    }
+                }
+            }
+        }
+
+        // 提示气泡（有界；错误级也在这里可见）
+        if (root.toasts.length > 0) : Rectangle {
+            background: #f7f7fa;
+            border-width: 1px;
+            border-color: #e6e6ea;
+            VerticalLayout {
+                padding: 8px;
+                spacing: 4px;
+                for toast[idx] in root.toasts : Rectangle {
+                    height: 34px;
+                    background: toast.level == "error" ? #ffe3e0 : (toast.level == "warn" ? #fff4d6 : #eef3ff);
+                    border-radius: 4px;
+                    HorizontalLayout {
+                        padding-left: 10px;
+                        padding-right: 10px;
+                        spacing: 8px;
+                        alignment: center;
+                        Text {
+                            text: toast.title;
+                            font-weight: 600;
+                            font-size: 12px;
+                            vertical-alignment: center;
+                        }
+                        Text {
+                            text: toast.body;
+                            font-size: 12px;
+                            vertical-alignment: center;
+                            horizontal-stretch: 1;
+                        }
+                        Rectangle {
+                            width: 22px;
+                            height: 22px;
+                            Text {
+                                text: root.dismiss-symbol;
+                                font-size: 14px;
+                                color: #7a7a7a;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                                x: 0;
+                                y: 0;
+                                width: 100%;
+                                height: 100%;
+                            }
+                            TouchArea {
+                                x: 0;
+                                y: 0;
+                                width: 100%;
+                                height: 100%;
+                                clicked => { root.dismiss-toast(toast.serial); }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 状态栏：队列 / 通道计数（合并、丢弃、命令拒绝均显式可见）/ 进度 / 快捷键
+        Rectangle {
+            height: 30px;
+            background: #f3f4f7;
+            HorizontalLayout {
+                padding-left: 12px;
+                padding-right: 12px;
+                spacing: 12px;
+                alignment: center;
+                Text { text: root.status-left; font-size: 11px; color: #4a4a4a; }
+                Text { text: root.channel-text; font-size: 11px; color: #8a8a8a; }
+                Text { text: root.progress-text; font-size: 11px; color: #1a3fb8; }
+                Rectangle { }
+                Text { text: root.hint; font-size: 11px; color: #8a8a8a; }
+            }
+        }
+    }
+
+    // 全局快捷键：Slint 只转发按键文本与修饰键，动作解析在 Rust（可单测）
+    shortcuts := FocusScope {
+        x: 0;
+        y: 0;
+        width: 0;
+        height: 0;
+        key-pressed(event) => {
+            return root.shortcut(event.text, event.modifiers.control, event.modifiers.shift, event.modifiers.alt, event.modifiers.meta) ? accept : reject;
+        }
+    }
+}

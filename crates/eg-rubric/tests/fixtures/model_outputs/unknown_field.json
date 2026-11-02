@@ -1,0 +1,11 @@
+{
+  "items": [
+    {
+      "criterion": "步骤一",
+      "points": 1000,
+      "required": true,
+      "depends_on": [],
+      "note": "模型多余字段"
+    }
+  ]
+}

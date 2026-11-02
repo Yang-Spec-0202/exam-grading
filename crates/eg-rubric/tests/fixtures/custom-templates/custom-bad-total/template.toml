@@ -1,0 +1,40 @@
+schema_version = 1
+template_id = "custom-bad-total"
+set_id = "custom-bad-total"
+display_name = "自定义错误模板"
+subject = "math"
+paper_style = "new-gaokao"
+status = "active"
+version = "2026.1"
+snapshot_year = 2026
+snapshot_label = "总分与题目合计不一致"
+total_score_milli = 20000
+question_count = 1
+structure_note = "1 道单选（10 分，但声明总分 20 分）"
+structure_confidence = "high"
+score_split_confidence = "high"
+
+[provenance]
+verified_at = "2026-11-02"
+confidence = "high"
+basis = "inferred"
+source_ids = ["C1"]
+disclaimer = "反例模板。"
+
+[[questions]]
+ordinal = 1
+label = "1"
+kind = "单选"
+max_score_milli = 10000
+skeleton = "objective-single"
+
+[skeletons.objective-single]
+scoring_mode = "全对才给分"
+label = "单选·全对"
+[[skeletons.objective-single.items]]
+ordinal = 1
+criterion = "【模板骨架】选出唯一正确选项"
+ratio_permille = 1000
+required = true
+depends_on = []
+placeholder = true

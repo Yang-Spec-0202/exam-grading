@@ -1,0 +1,152 @@
+---
+source: crates/eg-platform/src/config.rs
+expression: "AppConfig::default()"
+---
+{
+  "general": {
+    "mode": "standard",
+    "language": "zh-CN",
+    "theme": "system"
+  },
+  "ui": {
+    "page_size": 100,
+    "undo_depth": 50,
+    "start_page": "home",
+    "confirm_before_leave_unsaved": true,
+    "window_geometry": "auto"
+  },
+  "import": {
+    "remind_naming": true,
+    "batch_file_limit": 2000,
+    "pdf_dpi": 300,
+    "quality_blur_threshold": 120,
+    "quality_exposure_min": 0.12,
+    "quality_exposure_max": 0.9,
+    "quality_skew_max": 8.0,
+    "quality_min_long_edge": 1600,
+    "reject_behavior": "page_reject",
+    "duplicate_notice": true,
+    "max_pdf_pages": 200,
+    "max_file_mb": 64,
+    "parallelism": 4
+  },
+  "identity": {
+    "source": "file_name",
+    "ocr_fallback": false,
+    "barcode": false,
+    "unmatched_behavior": "undecided",
+    "ocr_threshold": 0.9,
+    "ocr_margin": 0.1
+  },
+  "align": {
+    "template_region": true,
+    "region_confidence_floor": 0.8,
+    "max_cross_pages": 3
+  },
+  "ocr": {
+    "model": "PaddleOCR-VL-1.6",
+    "emit_latex": true,
+    "segment_recognition": "on_demand",
+    "page_timeout_s": 60,
+    "repair_attempts": 1,
+    "confidence_floor": 0.75,
+    "cache": true
+  },
+  "grade": {
+    "score_granularity": 100,
+    "standard": {
+      "rule_threshold": 0.85,
+      "rule_then_model_threshold": 0.9,
+      "model_threshold": 0.85,
+      "rubric_threshold": 0.8
+    },
+    "fast": {
+      "rule_threshold": 0.8
+    },
+    "allow_uncalibrated_auto": false,
+    "conflict_policy": "escalate_manual",
+    "max_repair_attempts": 1,
+    "judge_timeout_s": 20,
+    "model_profile": "4B 指令模型 + 受限输出"
+  },
+  "fast": {
+    "enabled": true,
+    "sampling_rate": 0.2,
+    "low_confidence_weight": 0.7,
+    "sampling_seed": "random",
+    "sampled_readonly": true,
+    "fail_action": "ask",
+    "fail_default_scope": "single_question",
+    "export_label": true
+  },
+  "rubric": {
+    "template_pack": "national_pack",
+    "national_sets": {
+      "active": [
+        "新课标Ⅰ卷",
+        "新课标Ⅱ卷"
+      ],
+      "retired": [
+        "全国甲卷",
+        "全国乙卷"
+      ]
+    },
+    "partial_choice_enabled": true,
+    "min_score_granularity": 100,
+    "auto_validate": true,
+    "allow_custom_template": true,
+    "template_snapshot": "latest",
+    "repair_attempts": 1
+  },
+  "cas": {
+    "enabled": true,
+    "backend": "sympy-sidecar",
+    "timeout_s": 3,
+    "python_path": null,
+    "cache": true
+  },
+  "log": {
+    "level": "info",
+    "per_module_level": {},
+    "retention_days": 30,
+    "rotation": "daily",
+    "redaction": true,
+    "search_index": true,
+    "ui_viewer": true,
+    "index_range_days": 30,
+    "index_rebuild": {
+      "on_startup_check": true,
+      "manual": true,
+      "on_schema_change": true
+    }
+  },
+  "diagnostics": {
+    "include_schema": true
+  },
+  "storage": {
+    "soft_quota_gb": 20,
+    "verify_hash_on_read": true
+  },
+  "backup": {
+    "keep_generations": 5
+  },
+  "inference": {
+    "local_port": "auto",
+    "registry_path": "models/registry.toml",
+    "openai_base_url": null,
+    "model_user_selectable": true
+  },
+  "privacy": {
+    "cloud_enabled": false,
+    "send_original_image": false,
+    "export_mask": false
+  },
+  "docs": {
+    "site": true,
+    "link_check": true,
+    "publish": "git_hub_pages"
+  },
+  "dev": {
+    "record_sources": true
+  }
+}

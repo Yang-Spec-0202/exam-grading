@@ -10,7 +10,11 @@ description = "复核工作台视图模型与命令（改分、批注、抽检�
 workspace = true
 
 [dependencies]
+# 只读消费判分记录；数据源经 `ports` trait 注入（平台 repo 缺口见研究记录）。
 eg-domain = { workspace = true }
 eg-grade = { workspace = true }
-eg-capture = { workspace = true }
-eg-recognize = { workspace = true }
+thiserror = "2.0.21"
+
+[dev-dependencies]
+# 测试夹具构造比较器轨迹/模型调用需要 JSON 细节。
+serde_json = "1"

@@ -1,0 +1,18 @@
+{
+  "items": [
+    {
+      "criterion": "步骤一",
+      "points": 4000,
+      "required": true,
+      "depends_on": []
+    },
+    {
+      "criterion": "步骤二",
+      "points": 5000,
+      "required": false,
+      "depends_on": [
+        1
+      ]
+    }
+  ]
+}

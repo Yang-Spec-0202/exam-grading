@@ -1,0 +1,10 @@
+{
+  "items": [
+    {
+      "criterion": "零分步骤",
+      "points": 0,
+      "required": true,
+      "depends_on": []
+    }
+  ]
+}

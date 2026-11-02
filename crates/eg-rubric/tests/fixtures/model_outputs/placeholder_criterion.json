@@ -1,0 +1,10 @@
+{
+  "items": [
+    {
+      "criterion": "【模板骨架】关键步骤",
+      "points": 1000,
+      "required": true,
+      "depends_on": []
+    }
+  ]
+}

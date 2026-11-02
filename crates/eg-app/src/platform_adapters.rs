@@ -1,0 +1,446 @@
+//! platform v3 真实适配器：把 `eg-review` 的端口 trait 落到 platform 仓储/审计/撤销栈。
+//!
+//! 只做字段映射与事务组合，不写复核业务规则（规则仍在 `eg-review::ReviewService`）。
+
+use std::sync::Mutex;
+
+use eg_domain::{
+    Clock, ComparatorTrace, ComparatorTraceId, ExcludeReason, GradeId, GradeRecord, ModelCall,
+    ModelCallId, QuestionId, SubmissionExclusion, SubmissionId, Timestamp, Ulid,
+};
+use eg_grade::ports::{IdGenerator, IdSourceError};
+use eg_platform::Platform;
+use eg_platform::repo;
+use eg_review::undo::UndoKind;
+use eg_review::{
+    AnswerView, AuditOutcome, AuditRecord, AuditSink, RegradeEngine, RegradeRequest, RegradeResult,
+    ReviewError, ReviewMetadata, ReviewRepository, SamplingConclusion, UndoEntry, UndoStore,
+};
+
+use crate::nav::PageId;
+
+/// 平台 id 生成器适配（`eg-grade` 端口 → platform `UlidFactory`）。
+pub(crate) struct PlatformIdGen<'a> {
+    platform: &'a Platform,
+}
+
+impl<'a> PlatformIdGen<'a> {
+    pub(crate) const fn new(platform: &'a Platform) -> Self {
+        Self { platform }
+    }
+}
+
+impl IdGenerator for PlatformIdGen<'_> {
+    fn try_next_ulid(&self) -> Result<Ulid, IdSourceError> {
+        self.platform
+            .ids()
+            .next_ulid()
+            .map_err(|error| IdSourceError(error.to_string()))
+    }
+}
+
+/// 复核数据源：platform 真实仓储。
+pub(crate) struct PlatformReviewRepo<'a> {
+    platform: &'a Platform,
+}
+
+impl<'a> PlatformReviewRepo<'a> {
+    pub(crate) const fn new(platform: &'a Platform) -> Self {
+        Self { platform }
+    }
+}
+
+fn io_error(error: eg_platform::PlatformError) -> ReviewError {
+    ReviewError::Repository(error.to_string())
+}
+
+impl ReviewRepository for PlatformReviewRepo<'_> {
+    fn get(&self, grade_id: GradeId) -> Option<GradeRecord> {
+        self.platform
+            .db()
+            .read(|conn| repo::get_grade_record(conn, grade_id))
+            .ok()
+            .flatten()
+    }
+
+    fn revisions(&self, submission_id: SubmissionId, question_id: QuestionId) -> Vec<GradeRecord> {
+        self.platform
+            .db()
+            .read(|conn| repo::list_grade_records(conn, submission_id))
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|record| record.question_id == question_id)
+            .collect()
+    }
+
+    fn all_latest(&self) -> Vec<GradeRecord> {
+        let filter = repo::GradeQueueFilter::default();
+        self.platform
+            .db()
+            .read(|conn| repo::list_grade_records_for_queue(conn, &filter, None))
+            .unwrap_or_default()
+    }
+
+    fn append(&self, record: GradeRecord) -> Result<(), ReviewError> {
+        let record_clone = record.clone();
+        self.platform
+            .db()
+            .write(move |tx| repo::append_grade_record_with_reasons(tx, &record_clone, &[]))
+            .map_err(io_error)
+    }
+
+    fn save_exclusion(&self, exclusion: SubmissionExclusion) -> Result<(), ReviewError> {
+        self.platform
+            .db()
+            .write(move |tx| repo::upsert_submission_exclusion(tx, &exclusion))
+            .map_err(io_error)
+    }
+
+    fn clear_exclusion(&self, submission_id: SubmissionId) -> Result<(), ReviewError> {
+        self.platform
+            .db()
+            .write(move |tx| repo::delete_submission_exclusion(tx, submission_id))
+            .map(|_changed| ())
+            .map_err(io_error)
+    }
+
+    fn exclusion(&self, submission_id: SubmissionId) -> Option<SubmissionExclusion> {
+        self.platform
+            .db()
+            .read(|conn| repo::get_submission_exclusion(conn, submission_id))
+            .ok()
+            .flatten()
+    }
+
+    fn metadata(&self, record: &GradeRecord) -> ReviewMetadata {
+        // 单次读事务内取提交与题目标签，避免嵌套 db.read（读连接是不可重入 Mutex）。
+        let data = self
+            .platform
+            .db()
+            .read(|conn| {
+                let submission = repo::get_submission(conn, record.submission_id)?;
+                let label = match &submission {
+                    Some(submission) => repo::list_questions(conn, submission.paper_id)?
+                        .into_iter()
+                        .find(|question| question.id == record.question_id)
+                        .map(|question| (question.label, question.ordinal)),
+                    None => None,
+                };
+                Ok((submission, label))
+            })
+            .unwrap_or((None, None));
+        let (submission, label) = data;
+        let display = submission.as_ref().map_or_else(
+            || "学生***".to_owned(),
+            |submission| submission.source_stem.clone(),
+        );
+        ReviewMetadata {
+            student_no: submission.map_or_else(|| "unknown".to_owned(), |s| s.source_stem),
+            student_display_name: mask_name(&display),
+            question_label: label
+                .as_ref()
+                .map_or_else(|| "?".to_owned(), |(l, _)| l.clone()),
+            question_ordinal: label.map_or(0, |(_, ordinal)| ordinal),
+        }
+    }
+
+    fn answer(&self, record: &GradeRecord) -> Option<AnswerView> {
+        let summary = self
+            .platform
+            .db()
+            .read(|conn| repo::load_grade_evidence_summary(conn, record.id))
+            .ok()
+            .flatten()?;
+        summary.recognitions.first().map(|recognition| AnswerView {
+            text: recognition.text.clone(),
+            latex: None,
+            confidence: eg_domain::Confidence::new(recognition.confidence).ok(),
+            source: "recognition".to_owned(),
+        })
+    }
+
+    fn reference(&self, question_id: QuestionId) -> Option<AnswerView> {
+        // 参考答案文本由试卷答案键/识别提供；当前 platform 无按题投影，返回 None 由 UI 降级。
+        let _ = question_id;
+        None
+    }
+
+    fn comparator_trace(&self, id: ComparatorTraceId) -> Option<ComparatorTrace> {
+        let _ = id;
+        None
+    }
+
+    fn model_call(&self, id: ModelCallId) -> Option<ModelCall> {
+        let _ = id;
+        None
+    }
+}
+
+fn mask_name(name: &str) -> String {
+    let mut chars = name.chars();
+    match chars.next() {
+        Some(first) => format!("{first}***"),
+        None => "学生***".to_owned(),
+    }
+}
+
+/// 复核审计：platform 审计链（命令幂等键、原因码、范围、抽检结论）。
+pub(crate) struct PlatformAuditSink<'a> {
+    platform: &'a Platform,
+}
+
+impl<'a> PlatformAuditSink<'a> {
+    pub(crate) const fn new(platform: &'a Platform) -> Self {
+        Self { platform }
+    }
+}
+
+impl AuditSink for PlatformAuditSink<'_> {
+    fn append(&self, record: AuditRecord) -> Result<(), ReviewError> {
+        let mut entry = eg_platform::NewAuditEntry::new(
+            record.action.clone(),
+            record.entity_type.clone(),
+            record.entity_id.clone(),
+        )
+        .with_command_id(record.idempotency_key.clone())
+        .with_note(record.note.clone());
+        if let Some(reason) = record.reason {
+            entry = entry.with_reason_code(reason.as_str());
+        }
+        if let Some(scope) = record.scope {
+            entry = entry.with_scope(format!("{scope:?}"));
+        }
+        if let Some(verdict) = record.sampling_conclusion {
+            entry = entry.with_sampling_verdict(match verdict {
+                SamplingConclusion::Passed => "passed",
+                SamplingConclusion::Failed => "failed",
+            });
+        }
+        if let Some(detail) = &record.detail {
+            entry = entry.with_note(format!("{}；{}", record.note, detail));
+        }
+        self.platform
+            .audit()
+            .append(entry)
+            .map(|_| ())
+            .map_err(|error| ReviewError::Audit(error.to_string()))
+    }
+
+    fn list(&self) -> Vec<AuditRecord> {
+        Vec::new()
+    }
+
+    fn by_entity(&self, _entity_type: &str, _entity_id: &str) -> Vec<AuditRecord> {
+        Vec::new()
+    }
+}
+
+/// 撤销栈：undo 持久化到 platform，redo 暂存进程内（platform 无 redo 表，记 TODO）。
+pub(crate) struct PlatformUndoStore<'a> {
+    platform: &'a Platform,
+    depth: usize,
+    redo: Mutex<Vec<UndoEntry>>,
+}
+
+impl<'a> PlatformUndoStore<'a> {
+    pub(crate) fn new(platform: &'a Platform, depth: usize) -> Self {
+        Self {
+            platform,
+            depth: depth.max(50),
+            redo: Mutex::new(Vec::new()),
+        }
+    }
+
+    fn encode(entry: &UndoEntry) -> (String, String, String, serde_json::Value) {
+        let entity_id = match &entry.kind {
+            UndoKind::Record { grade_id, .. } => grade_id.to_string(),
+            UndoKind::SamplingConclusion { grade_id, .. } => grade_id.to_string(),
+            UndoKind::SubmissionExclusion { submission_id, .. } => submission_id.to_string(),
+        };
+        let entity_type = match &entry.kind {
+            UndoKind::Record { .. } | UndoKind::SamplingConclusion { .. } => "grade_record",
+            UndoKind::SubmissionExclusion { .. } => "submission",
+        };
+        let payload = match &entry.kind {
+            UndoKind::Record {
+                grade_id,
+                before,
+                after,
+            } => serde_json::json!({
+                "kind": "record",
+                "grade_id": grade_id.to_string(),
+                "before": before,
+                "after": after,
+            }),
+            UndoKind::SamplingConclusion {
+                grade_id,
+                conclusion,
+            } => serde_json::json!({
+                "kind": "sampling",
+                "grade_id": grade_id.to_string(),
+                "conclusion": match conclusion {
+                    SamplingConclusion::Passed => "passed",
+                    SamplingConclusion::Failed => "failed",
+                },
+            }),
+            UndoKind::SubmissionExclusion {
+                submission_id,
+                before,
+                after,
+            } => serde_json::json!({
+                "kind": "exclusion",
+                "submission_id": submission_id.to_string(),
+                "before": before,
+                "after": after,
+            }),
+        };
+        (
+            entity_type.to_owned(),
+            entity_id,
+            entry.label.clone(),
+            payload,
+        )
+    }
+
+    fn decode(label: &str, payload: &serde_json::Value) -> Option<UndoEntry> {
+        let kind = payload.get("kind")?.as_str()?;
+        let kind = match kind {
+            "record" => UndoKind::Record {
+                grade_id: GradeId::from_ulid(Ulid::parse(payload.get("grade_id")?.as_str()?).ok()?),
+                before: serde_json::from_value(payload.get("before")?.clone()).ok()?,
+                after: serde_json::from_value(payload.get("after")?.clone()).ok()?,
+            },
+            "sampling" => UndoKind::SamplingConclusion {
+                grade_id: GradeId::from_ulid(Ulid::parse(payload.get("grade_id")?.as_str()?).ok()?),
+                conclusion: match payload.get("conclusion")?.as_str()? {
+                    "passed" => SamplingConclusion::Passed,
+                    _ => SamplingConclusion::Failed,
+                },
+            },
+            "exclusion" => UndoKind::SubmissionExclusion {
+                submission_id: SubmissionId::from_ulid(
+                    Ulid::parse(payload.get("submission_id")?.as_str()?).ok()?,
+                ),
+                before: payload
+                    .get("before")
+                    .filter(|value| !value.is_null())
+                    .and_then(|value| serde_json::from_value(value.clone()).ok()),
+                after: serde_json::from_value(payload.get("after")?.clone()).ok()?,
+            },
+            _ => return None,
+        };
+        Some(UndoEntry::new(kind, label))
+    }
+}
+
+impl UndoStore for PlatformUndoStore<'_> {
+    fn push_undo(&self, entry: UndoEntry) {
+        let Ok(id) = self.platform.ids().next_ulid() else {
+            return;
+        };
+        let Ok(command_id) = self.platform.ids().next_ulid() else {
+            return;
+        };
+        let (entity_type, entity_id, label, payload) = Self::encode(&entry);
+        let stored = repo::UndoEntry {
+            id,
+            command_id: command_id.to_string(),
+            action: "review.undo".to_owned(),
+            entity_type,
+            entity_id,
+            payload,
+            created_at: self.platform.clock().now(),
+        };
+        let _ = self.depth;
+        let _ = label;
+        let _ = self
+            .platform
+            .db()
+            .write(move |tx| repo::push_undo(tx, &stored));
+    }
+
+    fn pop_undo(&self) -> Option<UndoEntry> {
+        let stored = self
+            .platform
+            .db()
+            .write(|tx| repo::pop_undo(tx))
+            .ok()
+            .flatten()?;
+        Self::decode(&stored.action, &stored.payload)
+    }
+
+    fn push_redo(&self, entry: UndoEntry) {
+        if let Ok(mut redo) = self.redo.lock() {
+            if redo.len() >= self.depth {
+                redo.remove(0);
+            }
+            redo.push(entry);
+        }
+    }
+
+    fn pop_redo(&self) -> Option<UndoEntry> {
+        self.redo.lock().ok()?.pop()
+    }
+
+    fn clear_redo(&self) {
+        if let Ok(mut redo) = self.redo.lock() {
+            redo.clear();
+        }
+    }
+
+    fn undo_len(&self) -> usize {
+        self.platform
+            .db()
+            .read(|conn| repo::list_undo(conn, 200))
+            .map_or(0, |entries| entries.len())
+    }
+
+    fn redo_len(&self) -> usize {
+        self.redo.lock().map_or(0, |redo| redo.len())
+    }
+}
+
+/// 重判引擎：单题重判需 grade 流水线（OCR/align/推理装配），本轮保持显式失败。
+pub(crate) struct UnavailableRegrade;
+
+impl RegradeEngine for UnavailableRegrade {
+    fn regrade(&self, _request: &RegradeRequest) -> Result<RegradeResult, ReviewError> {
+        Err(ReviewError::RegradeFailed(
+            "单题重判需要 grade 流水线装配（后续任务接入）".to_owned(),
+        ))
+    }
+}
+
+/// 供 `worker` 复用：当前页的页面 id（避免未使用告警占位）。
+#[allow(dead_code)]
+pub(crate) const _PAGE: PageId = PageId::Review;
+
+/// 供 `worker` 复用：排除原因标签（审计展示）。
+#[must_use]
+pub(crate) fn exclusion_label(reason: ExcludeReason) -> &'static str {
+    match reason {
+        ExcludeReason::Absent => "缺考",
+        ExcludeReason::Duplicate => "重复提交",
+        ExcludeReason::OutOfScope => "超出范围",
+        ExcludeReason::Invalid => "无效提交",
+        ExcludeReason::Other => "其他",
+    }
+}
+
+/// 抽检结论时间辅助（审计显示）。
+#[must_use]
+pub(crate) fn now_timestamp(platform: &Platform) -> Timestamp {
+    platform.clock().now()
+}
+
+/// `Clock` trait 占位使用（若未来需要自定义时钟注入）。
+#[allow(dead_code)]
+pub(crate) fn clock_of(platform: &Platform) -> &dyn Clock {
+    platform.clock().as_ref()
+}
+
+/// 审计结果标签（诊断）。
+#[must_use]
+pub(crate) fn outcome_label(outcome: AuditOutcome) -> &'static str {
+    outcome.as_str()
+}

@@ -29,7 +29,36 @@ feature-depth = 1
 [advisories]
 # 安全公告库使用默认官方源（https://github.com/rustsec/advisory-db）。
 # 确有不可避免的公告时，在此按 id 忽略并写明 reason；禁止无理由长期忽略。
-ignore = []
+ignore = [
+    # —— 2026-11-02 许可/公告处置（task-18，eg-platform T07–T12 依赖链）——
+    # 链路：eg-platform → keyring 4.2.0（v1 API）→ zbus-secret-service-keyring-store 1.0.1
+    #       → secret-service 5.2.0 → zbus 5.19.0 → zvariant 5.15.1 / zbus_names 4.3.5。
+    # 这 3 条均为 **unmaintained**（非漏洞、无 CVE）：上游 2026-08 把 zvariant 系列并入
+    # zbus 6.0.0（https://github.com/z-galaxy/zbus/issues/2043，已关闭），5.x 不再单独维护，
+    # 公告本身标注 “No safe upgrade is available!”。keyring 4.2.0 尚未迁移到 zbus 6。
+    # 该链路只在 **Linux**（非 macOS/iOS/Android 的 unix）编译：keyring 的 v1 特性为
+    # 各平台按 cfg 选后端，本项目发行目标是 macOS（SPEC.md §11 环境），macOS 构建实际
+    # 编译的是 apple-native-keyring-store/keychain 分支，不含 zbus，故对发行包无影响。
+    # deny.toml 的 [graph] 有意不限制 target，为了让跨平台许可/来源检查也覆盖，因此
+    # 不能靠 target 过滤消掉，只能按公告忽略；若将来真正支持 Linux 桌面，必须重新评估
+    # 并迁移到 zbus 6 系（或改用其他 Secret Service 后端）。
+    # 记录：docs/dev/research/platform.md（§9 风险与偏差）。
+    "RUSTSEC-2026-0370", # zvariant 5.15.1 unmaintained：并入 zbus 6，无 5.x 安全升级
+    "RUSTSEC-2026-0371", # zbus_names 4.3.5 unmaintained：同上，随 zvariant 合并
+    "RUSTSEC-2026-0372", # zvariant_derive 5.15.1 unmaintained：派生宏并入 zbus 6
+    # —— 2026-11-02 Slint 引入后的公告处置（task-36 T35 app 外壳）——
+    # 链路：eg-app → slint 1.18.1 → i-slint-backend-winit 1.18.1 → winit 0.30.13
+    #       → sctk-adwaita 0.10.1（Linux/Wayland 窗口装饰后端）→ ab_glyph 0.2.32
+    #       → owned_ttf_parser 0.25.1 → ttf-parser 0.25.1。
+    # 该 crate 为 unmaintained（非漏洞、无 CVE），公告标注 “No safe upgrade is available!”；
+    # 上游建议迁移到 skrifa，但 Slint 1.18.1 尚未迁移（1.19 未发布）。
+    # 只在 Linux/Wayland 构建编译；本项目发行目标是 macOS（SPEC.md §11 环境），
+    # macOS 构建实际编译 winit 的 macOS 后端，不含 sctk-adwaita/ttf-parser 分支。
+    # deny.toml 的 [graph] 有意不限制 target，因此不能靠 target 过滤消掉，只能按公告忽略；
+    # 若将来支持 Linux 桌面，必须重新评估（等待 Slint 升级到 skrifa 或换装饰后端）。
+    # 记录：docs/dev/research/app.md §8.4。
+    "RUSTSEC-2026-0192", # ttf-parser 0.25.1 unmaintained：Slint/winit 的 Linux Wayland 装饰链
+]
 
 [licenses]
 # 许可白名单（SPDX 标识，大小写与拼写必须精确；SPDX v3.11 列表）。

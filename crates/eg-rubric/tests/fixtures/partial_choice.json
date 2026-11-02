@@ -1,0 +1,54 @@
+{
+  "variants": [
+    {
+      "name": "三选项官方口径：选对1个2分、2个4分",
+      "correct_option_count": 3,
+      "total_milli": 6000,
+      "tiers": [{ "selected_correct": 1, "points": 2000 }, { "selected_correct": 2, "points": 4000 }],
+      "source": "official",
+      "source_note": "2026 年全国卷评分细则：有错选 0 分",
+      "wrong_selection_zero": true,
+      "expect": "pass"
+    },
+    {
+      "name": "两选项官方口径：选对1个3分",
+      "correct_option_count": 2,
+      "total_milli": 6000,
+      "tiers": [{ "selected_correct": 1, "points": 3000 }],
+      "source": "official",
+      "source_note": "2025 年全国卷评分细则：有错选 0 分",
+      "wrong_selection_zero": true,
+      "expect": "pass"
+    },
+    {
+      "name": "教师自定义口径（非官方，来源可追溯）",
+      "correct_option_count": 3,
+      "total_milli": 6000,
+      "tiers": [{ "selected_correct": 1, "points": 1000 }, { "selected_correct": 2, "points": 3000 }],
+      "source": "teacher_custom",
+      "source_note": "本校月考自定义：错选 0 分",
+      "wrong_selection_zero": true,
+      "expect": "pass"
+    },
+    {
+      "name": "反例：档位跳档（缺第1档）",
+      "correct_option_count": 3,
+      "total_milli": 6000,
+      "tiers": [{ "selected_correct": 2, "points": 4000 }],
+      "source": "official",
+      "source_note": "2026 年全国卷评分细则",
+      "wrong_selection_zero": true,
+      "expect": "error:P02"
+    },
+    {
+      "name": "反例：档位单调性破坏（高分在前）",
+      "correct_option_count": 3,
+      "total_milli": 6000,
+      "tiers": [{ "selected_correct": 1, "points": 5000 }, { "selected_correct": 2, "points": 4000 }],
+      "source": "official",
+      "source_note": "2026 年全国卷评分细则",
+      "wrong_selection_zero": true,
+      "expect": "error:P03"
+    }
+  ]
+}

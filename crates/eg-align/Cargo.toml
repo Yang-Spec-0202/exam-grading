@@ -11,5 +11,15 @@ workspace = true
 
 [dependencies]
 eg-domain = { workspace = true }
-eg-capture = { workspace = true }
-eg-recognize = { workspace = true }
+# 落库/审计/配置/时钟/id 只用平台的公开接口；核心算法不直接依赖 SQLite。
+eg-platform = { workspace = true }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+thiserror = "2.0.21"
+
+[dev-dependencies]
+tempfile = "3.27.0"
+
+# TODO(适配器)：`eg-capture`/`eg-recognize` 仍在并行实现，本 crate 用
+# `PageSource`/`RecognitionSource` 端口解耦；接口冻结后再加回依赖并补真实适配器
+# （届时只改 `src/ports.rs` 与 `src/platform_bridge.rs`，核心算法不动）。

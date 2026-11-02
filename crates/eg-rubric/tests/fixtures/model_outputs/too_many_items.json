@@ -1,0 +1,310 @@
+{
+  "items": [
+    {
+      "criterion": "步骤 1",
+      "points": 100,
+      "required": false,
+      "depends_on": []
+    },
+    {
+      "criterion": "步骤 2",
+      "points": 100,
+      "required": false,
+      "depends_on": []
+    },
+    {
+      "criterion": "步骤 3",
+      "points": 100,
+      "required": false,
+      "depends_on": []
+    },
+    {
+      "criterion": "步骤 4",
+      "points": 100,
+      "required": false,
+      "depends_on": []
+    },
+    {
+      "criterion": "步骤 5",
+      "points": 100,
+      "required": false,
+      "depends_on": []
+    },
+    {
+      "criterion": "步骤 6",
+      "points": 100,
+      "required": false,
+      "depends_on": []
+    },
+    {
+      "criterion": "步骤 7",
+      "points": 100,
+      "required": false,
+      "depends_on": []
+    },
+    {
+      "criterion": "步骤 8",
+      "points": 100,
+      "required": false,
+      "depends_on": []
+    },
+    {
+      "criterion": "步骤 9",
+      "points": 100,
+      "required": false,
+      "depends_on": []
+    },
+    {
+      "criterion": "步骤 10",
+      "points": 100,
+      "required": false,
+      "depends_on": []
+    },
+    {
+      "criterion": "步骤 11",
+      "points": 100,
+      "required": false,
+      "depends_on": []
+    },
+    {
+      "criterion": "步骤 12",
+      "points": 100,
+      "required": false,
+      "depends_on": []
+    },
+    {
+      "criterion": "步骤 13",
+      "points": 100,
+      "required": false,
+      "depends_on": []
+    },
+    {
+      "criterion": "步骤 14",
+      "points": 100,
+      "required": false,
+      "depends_on": []
+    },
+    {
+      "criterion": "步骤 15",
+      "points": 100,
+      "required": false,
+      "depends_on": []
+    },
+    {
+      "criterion": "步骤 16",
+      "points": 100,
+      "required": false,
+      "depends_on": []
+    },
+    {
+      "criterion": "步骤 17",
+      "points": 100,
+      "required": false,
+      "depends_on": []
+    },
+    {
+      "criterion": "步骤 18",
+      "points": 100,
+      "required": false,
+      "depends_on": []
+    },
+    {
+      "criterion": "步骤 19",
+      "points": 100,
+      "required": false,
+      "depends_on": []
+    },
+    {
+      "criterion": "步骤 20",
+      "points": 100,
+      "required": false,
+      "depends_on": []
+    },
+    {
+      "criterion": "步骤 21",
+      "points": 100,
+      "required": false,
+      "depends_on": []
+    },
+    {
+      "criterion": "步骤 22",
+      "points": 100,
+      "required": false,
+      "depends_on": []
+    },
+    {
+      "criterion": "步骤 23",
+      "points": 100,
+      "required": false,
+      "depends_on": []
+    },
+    {
+      "criterion": "步骤 24",
+      "points": 100,
+      "required": false,
+      "depends_on": []
+    },
+    {
+      "criterion": "步骤 25",
+      "points": 100,
+      "required": false,
+      "depends_on": []
+    },
+    {
+      "criterion": "步骤 26",
+      "points": 100,
+      "required": false,
+      "depends_on": []
+    },
+    {
+      "criterion": "步骤 27",
+      "points": 100,
+      "required": false,
+      "depends_on": []
+    },
+    {
+      "criterion": "步骤 28",
+      "points": 100,
+      "required": false,
+      "depends_on": []
+    },
+    {
+      "criterion": "步骤 29",
+      "points": 100,
+      "required": false,
+      "depends_on": []
+    },
+    {
+      "criterion": "步骤 30",
+      "points": 100,
+      "required": false,
+      "depends_on": []
+    },
+    {
+      "criterion": "步骤 31",
+      "points": 100,
+      "required": false,
+      "depends_on": []
+    },
+    {
+      "criterion": "步骤 32",
+      "points": 100,
+      "required": false,
+      "depends_on": []
+    },
+    {
+      "criterion": "步骤 33",
+      "points": 100,
+      "required": false,
+      "depends_on": []
+    },
+    {
+      "criterion": "步骤 34",
+      "points": 100,
+      "required": false,
+      "depends_on": []
+    },
+    {
+      "criterion": "步骤 35",
+      "points": 100,
+      "required": false,
+      "depends_on": []
+    },
+    {
+      "criterion": "步骤 36",
+      "points": 100,
+      "required": false,
+      "depends_on": []
+    },
+    {
+      "criterion": "步骤 37",
+      "points": 100,
+      "required": false,
+      "depends_on": []
+    },
+    {
+      "criterion": "步骤 38",
+      "points": 100,
+      "required": false,
+      "depends_on": []
+    },
+    {
+      "criterion": "步骤 39",
+      "points": 100,
+      "required": false,
+      "depends_on": []
+    },
+    {
+      "criterion": "步骤 40",
+      "points": 100,
+      "required": false,
+      "depends_on": []
+    },
+    {
+      "criterion": "步骤 41",
+      "points": 100,
+      "required": false,
+      "depends_on": []
+    },
+    {
+      "criterion": "步骤 42",
+      "points": 100,
+      "required": false,
+      "depends_on": []
+    },
+    {
+      "criterion": "步骤 43",
+      "points": 100,
+      "required": false,
+      "depends_on": []
+    },
+    {
+      "criterion": "步骤 44",
+      "points": 100,
+      "required": false,
+      "depends_on": []
+    },
+    {
+      "criterion": "步骤 45",
+      "points": 100,
+      "required": false,
+      "depends_on": []
+    },
+    {
+      "criterion": "步骤 46",
+      "points": 100,
+      "required": false,
+      "depends_on": []
+    },
+    {
+      "criterion": "步骤 47",
+      "points": 100,
+      "required": false,
+      "depends_on": []
+    },
+    {
+      "criterion": "步骤 48",
+      "points": 100,
+      "required": false,
+      "depends_on": []
+    },
+    {
+      "criterion": "步骤 49",
+      "points": 100,
+      "required": false,
+      "depends_on": []
+    },
+    {
+      "criterion": "步骤 50",
+      "points": 100,
+      "required": false,
+      "depends_on": []
+    },
+    {
+      "criterion": "步骤 51",
+      "points": 100,
+      "required": false,
+      "depends_on": []
+    }
+  ]
+}

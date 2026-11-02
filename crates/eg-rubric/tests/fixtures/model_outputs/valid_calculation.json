@@ -1,0 +1,26 @@
+{
+  "items": [
+    {
+      "criterion": "正确建立方程或不等式",
+      "points": 3900,
+      "required": false,
+      "depends_on": []
+    },
+    {
+      "criterion": "主要运算过程正确，得到关键中间结论",
+      "points": 5200,
+      "required": false,
+      "depends_on": [
+        1
+      ]
+    },
+    {
+      "criterion": "最终结论正确且符合题目要求",
+      "points": 3900,
+      "required": false,
+      "depends_on": [
+        2
+      ]
+    }
+  ]
+}

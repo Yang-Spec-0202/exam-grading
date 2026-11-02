@@ -1,0 +1,10 @@
+{
+  "items": [
+    {
+      "criterion": "全部选对得满分；有错选不得分",
+      "points": 6000,
+      "required": true,
+      "depends_on": []
+    }
+  ]
+}

@@ -11,4 +11,13 @@ workspace = true
 
 [dependencies]
 eg-domain = { workspace = true }
-eg-grade = { workspace = true }
+chrono = { version = "0.4.45", default-features = false, features = ["std"] }
+rust_xlsxwriter = "0.102.0"
+# TODO(report, task-35)：判分记录在 v1 由 `eg-grade` 产出，但并行开发期间该 crate 未通过编译
+# （`crates/eg-grade/src/pipeline.rs` 的 `error[E0425]`）。为不阻塞本模块，`ReportSource`
+# 端口先以 `eg-domain::GradeRecord` 夹具驱动；待 eg-grade 修复后改为经 `eg-grade` 的公开查询
+# 类型取数（不再直接读 `eg-domain` 的持久化结构）。见 `docs/dev/research/report.md` §与规范的偏差。
+# eg-grade = { workspace = true }
+
+[dev-dependencies]
+chrono = { version = "0.4.45", default-features = false, features = ["std"] }

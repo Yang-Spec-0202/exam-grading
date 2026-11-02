@@ -1,0 +1,254 @@
+# exam-grading 模型注册表（随发行版发布，只读）
+#
+# 事实来源（2026-11-02 实测，见 docs/dev/research/models.md 与 inference-serving.md）：
+# - 权重文件、字节数、SHA-256 与 scripts/model/registry.tsv 一致（由 pull.sh 下载后用
+#   verify.sh 复核）；
+# - 端口与 serving 参数与 scripts/model/profiles.tsv 一致（serve.sh 用同一组值）；
+# - 许可来自各自 Hugging Face 模型卡。
+#
+# 规则：
+# 1. 未在本注册表内登记的模型**不得加载**；配置指向未登记 id 时启动即失败，不静默回退。
+# 2. 许可过白名单门禁（SPEC-inference.md §2.4，fail-closed）；命中排除清单必须带
+#    license_review 人工评审引用。
+# 3. local_server 下 implementation 默认 llama.cpp；MLX 需独立登记并单独验收。
+# 4. 同一 serve_unit 的条目共享一个 llama-server 进程（同权重、同端口），
+#    router/structurer 复用判定模型即通过 serve_unit 表达。
+# 5. 云端条目只登记地址、模型名与价格，**不登记任何凭据**（credentials_env 只写变量名）。
+
+schema_version = 1
+
+# ───────────────────────── 默认 OCR：PaddleOCR-VL-1.6（官方 BF16） ─────────────────────────
+[[models]]
+id = "paddleocr-vl-1.6"
+version = "1.6"
+role = "ocr"
+backend = "local_server"
+implementation = "llama.cpp"
+quantization = "bf16"
+context_length = 8192
+license = "Apache-2.0"
+max_concurrency = 1
+timeout_secs = 60
+prompt_schema_version = "ocr.blocks.v1"
+description = "默认 OCR（CONFIG.md ocr.model）：官方 GGUF 为 BF16，双文件约 1.8GB；热启动 0.8-2.5s、首次读盘 10-11s"
+
+[models.local]
+binary = "llama-server"
+port = 8081
+startup_timeout_secs = 12
+extra_args = []
+
+[[models.weights]]
+component = "model"
+file = "model.gguf"
+sha256 = "f3ae46ec885050acf4b3d31944431e1fd90d50664fb09126af4a3c050ba14ee8"
+bytes = 935769056
+
+[[models.weights]]
+component = "mmproj"
+file = "mmproj.gguf"
+sha256 = "204d757d7610d9b3faab10d506d69e5b244e32bf765e2bab2d0167e65e0a058a"
+bytes = 881770560
+
+# ───────────────────────── OCR 备选：GLM-OCR（MIT，ggml-org 量化） ─────────────────────────
+[[models]]
+id = "glm-ocr"
+version = "1.0"
+role = "ocr"
+backend = "local_server"
+implementation = "llama.cpp"
+quantization = "q8_0"
+context_length = 8192
+license = "MIT"
+max_concurrency = 1
+timeout_secs = 60
+prompt_schema_version = "ocr.blocks.v1"
+description = "低许可风险备选（MIT）；整页 prompt token 偏多、单页约 15-39s。注意：llama-server 下不要传仓库自带 chat_template.jinja"
+
+[models.local]
+binary = "llama-server"
+port = 8083
+startup_timeout_secs = 12
+extra_args = []
+
+[[models.weights]]
+component = "model"
+file = "model.gguf"
+sha256 = "45bc244a6446aff850521dc41f18bc8d7105ad5f0c2c8c28af04e7cc4f4d50b1"
+bytes = 950433408
+
+[[models.weights]]
+component = "mmproj"
+file = "mmproj.gguf"
+sha256 = "9c4b58e33e316ed142eb5dcb41abec3844d3e6e5dc361ffb782c3fa9d175141f"
+bytes = 484403648
+
+# ───────────────────────── OCR 备选：Xiaomi-OCR-0（第三方 Q4，公式优先） ─────────────────────────
+[[models]]
+id = "xiaomi-ocr-0"
+version = "0"
+role = "ocr"
+backend = "local_server"
+implementation = "llama.cpp"
+quantization = "q4_k_m"
+context_length = 8192
+license = "Apache-2.0"
+max_concurrency = 1
+timeout_secs = 60
+prompt_schema_version = "ocr.blocks.v1"
+description = "公式优先候选；第三方量化。实测能加载但公式输出为纯文本、非 LaTeX，不满足 ocr.emit_latex，默认不启用"
+
+[models.local]
+binary = "llama-server"
+port = 8084
+startup_timeout_secs = 12
+extra_args = []
+
+[[models.weights]]
+component = "model"
+file = "model.gguf"
+sha256 = "1e497ff06b91a3d822c543066df3e9ef69c62c5423be09d739dfa1db55630d3a"
+bytes = 529297664
+
+[[models.weights]]
+component = "mmproj"
+file = "mmproj.gguf"
+sha256 = "634d6bc95781ebf4a3f06570a59859fa5082d488db540fd474bc6b4061aec90e"
+bytes = 207346624
+
+# ───────────────────────── 默认判定：Qwen3.5-4B Q4_K_M（关 thinking） ─────────────────────────
+[[models]]
+id = "qwen3.5-4b-instruct"
+version = "3.5"
+role = "judge"
+backend = "local_server"
+implementation = "llama.cpp"
+quantization = "q4_k_m"
+context_length = 8192
+license = "Apache-2.0"
+max_concurrency = 1
+timeout_secs = 20
+prompt_schema_version = "judge.outcome.v1"
+description = "默认判定（CONFIG.md grade.model_profile）：4B 指令模型 + 受限 JSON；Qwen3 系列必须关闭 thinking，否则 content 为空"
+
+[models.local]
+binary = "llama-server"
+port = 8082
+startup_timeout_secs = 12
+# 关键参数：Qwen3.5 的 chat template 用 enable_thinking 控制；不关会只返回 reasoning 而 content 为空。
+extra_args = ["--chat-template-kwargs", "{\"enable_thinking\":false}"]
+
+[[models.weights]]
+component = "model"
+file = "model.gguf"
+sha256 = "00fe7986ff5f6b463e62455821146049db6f9313603938a70800d1fb69ef11a4"
+bytes = 2740937888
+
+# ───────────────────────── 判定备选：H2O-Lightning-4B（官方 GGUF） ─────────────────────────
+[[models]]
+id = "h2o-lightning-4b"
+version = "1.1"
+role = "judge"
+backend = "local_server"
+implementation = "llama.cpp"
+quantization = "q4_k_m"
+context_length = 8192
+license = "Apache-2.0"
+max_concurrency = 1
+timeout_secs = 20
+prompt_schema_version = "judge.outcome.v1"
+description = "决策专用备选（JevBench 口径综合第 2）；提示词协议与受限 JSON 不同，需 grade 侧配合，默认不启用"
+
+[models.local]
+binary = "llama-server"
+port = 8085
+startup_timeout_secs = 12
+extra_args = ["--chat-template-kwargs", "{\"enable_thinking\":false}"]
+
+[[models.weights]]
+component = "model"
+file = "model.gguf"
+sha256 = "5ec969c6edbad5f1750141742f635cc7f01576bf9432151f730f0a6c30042768"
+bytes = 2708808736
+
+# ───────────────────────── 路由：复用判定模型的 serve_unit ─────────────────────────
+[[models]]
+id = "qwen3.5-4b-router"
+version = "3.5"
+role = "router"
+backend = "local_server"
+implementation = "llama.cpp"
+quantization = "q4_k_m"
+context_length = 8192
+license = "Apache-2.0"
+max_concurrency = 1
+timeout_secs = 20
+prompt_schema_version = "router.enum.v1"
+description = "L1 分类澄清；与判定模型同权重同进程（serve_unit 指向判定条目），只换提示词与 Schema"
+
+[models.local]
+binary = "llama-server"
+port = 8082
+startup_timeout_secs = 12
+serve_unit = "qwen3.5-4b-instruct"
+extra_args = ["--chat-template-kwargs", "{\"enable_thinking\":false}"]
+
+[[models.weights]]
+component = "model"
+file = "model.gguf"
+sha256 = "00fe7986ff5f6b463e62455821146049db6f9313603938a70800d1fb69ef11a4"
+bytes = 2740937888
+
+# ───────────────────────── 规则整理：复用判定模型的 serve_unit ─────────────────────────
+[[models]]
+id = "qwen3.5-4b-structurer"
+version = "3.5"
+role = "structurer"
+backend = "local_server"
+implementation = "llama.cpp"
+quantization = "q4_k_m"
+context_length = 8192
+license = "Apache-2.0"
+max_concurrency = 1
+timeout_secs = 30
+prompt_schema_version = "structurer.items.v1"
+description = "规则整理草稿（永不直接生成生效规则）；与判定模型同权重同进程"
+
+[models.local]
+binary = "llama-server"
+port = 8082
+startup_timeout_secs = 12
+serve_unit = "qwen3.5-4b-instruct"
+extra_args = ["--chat-template-kwargs", "{\"enable_thinking\":false}"]
+
+[[models.weights]]
+component = "model"
+file = "model.gguf"
+sha256 = "00fe7986ff5f6b463e62455821146049db6f9313603938a70800d1fb69ef11a4"
+bytes = 2740937888
+
+# ───────────────────────── 云端兜底预设：DeepSeek（默认关闭，逐任务授权） ─────────────────────────
+[[models]]
+id = "deepseek-flash"
+version = "DeepSeek-V4.1-Flash-1017"
+role = "judge"
+backend = "openai_compat"
+quantization = "remote"
+context_length = 1048576
+license = "Apache-2.0"
+max_concurrency = 4
+timeout_secs = 120
+prompt_schema_version = "judge.outcome.v1"
+description = "云端兜底（OpenAI 兼容）。默认关闭：需 privacy.cloud_enabled + 该任务 TaskConsent 双重门禁；本地优先、失败显式，绝不静默降级"
+
+[models.cloud]
+base_url = "https://api.deepseek.com"
+model_name = "deepseek-flash"
+credentials_env = "DEEPSEEK_API_KEY"
+# 价格：每百万 token 的微元（1 元 = 1_000_000 微元）；空闲/高峰两档，来自官方文档 2026-11-02。
+input_cache_miss_idle_micros = 1000000
+input_cache_miss_peak_micros = 2000000
+input_cache_hit_idle_micros = 20000
+input_cache_hit_peak_micros = 40000
+output_idle_micros = 4000000
+output_peak_micros = 8000000

@@ -6,11 +6,40 @@ rust-version.workspace = true
 publish.workspace = true
 description = "Slint 桌面外壳与组合根"
 
-[lints]
-workspace = true
+# 说明：本 crate 不能继承 `[lints] workspace = true`——工作区 rust lint 为
+# `unsafe_code = "forbid"`，而 Slint 1.18.1 生成代码含 `#[allow(unsafe_code)]`（VTable
+# 实现），`forbid` 不可被 allow 覆盖会导致编译失败。故此处手动复制工作区 lint 清单，
+# 仅把 `unsafe_code` 放宽为 `allow`（本 crate 不写 unsafe；unsafe 全部来自生成的 Slint 代码）。
+# 记录：`docs/dev/research/app.md`「与规范的偏差」。
+[lints.rust]
+unsafe_code = "allow"
+# Slint 生成代码（include_modules!）没有文档注释；bin crate 不发布文档，故 allow。
+missing_docs = "allow"
+# Slint 生成代码含大量 `pub` 内部项且未实现 Debug；bin crate 不外泄 API，故 allow。
+unreachable_pub = "allow"
+missing_debug_implementations = "allow"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+dbg_macro = "deny"
+todo = "warn"
 
 [dependencies]
+eg-domain = { workspace = true }
 eg-platform = { workspace = true }
+eg-capture = { workspace = true }
+eg-grade = { workspace = true }
 eg-inference = { workspace = true }
 eg-review = { workspace = true }
+eg-rubric = { workspace = true }
 eg-report = { workspace = true }
+serde_json = "1"
+slint = "=1.18.1"
+toml = "1"
+
+[build-dependencies]
+slint-build = "=1.18.1"

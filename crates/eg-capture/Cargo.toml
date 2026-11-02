@@ -12,3 +12,23 @@ workspace = true
 [dependencies]
 eg-platform = { workspace = true }
 eg-domain = { workspace = true }
+# eg-platform 已交付：资产库经 `src/platform_bridge.rs` 的 `AssetStoreAdapter` 接入；
+# 业务落库按 D1（负责人已批准）在 `src/persist.rs` 内直接使用其 db/repo/audit，
+# 在单个事务里写 Submission/Page/asset_link/审计（详见 docs/dev/research/capture.md §7）。
+# PDF 拆页：纯 Rust 栅格化，见 docs/dev/research/pdf.md（hayro 0.8.0 实测）。
+hayro = "0.8"
+# 图片解码与派生图，见 docs/dev/research/deps.md（image 0.25.10 实测）。
+image = { version = "0.25", default-features = false, features = [
+    "png",
+    "jpeg",
+    "tiff",
+] }
+# EXIF 方向（BSD-2-Clause，见 docs/dev/research/deps.md）。
+kamadak-exif = "0.6"
+# 事件/报告结构（快照与审计字段）。
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = { version = "1.0.154", features = ["float_roundtrip"] }
+thiserror = "2.0.21"
+
+[dev-dependencies]
+tempfile = "3.27.0"

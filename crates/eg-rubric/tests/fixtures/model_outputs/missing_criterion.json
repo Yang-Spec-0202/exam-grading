@@ -1,0 +1,9 @@
+{
+  "items": [
+    {
+      "points": 1000,
+      "required": true,
+      "depends_on": []
+    }
+  ]
+}
