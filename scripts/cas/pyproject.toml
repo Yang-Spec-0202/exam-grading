@@ -1,0 +1,10 @@
+[project]
+name = "exam-grading-cas"
+version = "0.1.0"
+description = "sympy CAS sidecar for exam-grading subject-math"
+requires-python = ">=3.12,<3.13"
+dependencies = ["sympy==1.14.0"]
+license = { text = "MIT" }
+
+[tool.uv]
+package = false

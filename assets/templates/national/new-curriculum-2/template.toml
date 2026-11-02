@@ -16,9 +16,9 @@ display_name = "新课标Ⅱ卷"
 subject = "math"
 paper_style = "new-gaokao"            # new-gaokao | old-gaokao
 status = "active"                     # active | retired
-version = "2026.1"
+version = "2026.2"
 snapshot_year = 2026
-snapshot_label = "2026 年卷结构（2024 年起定型，2025–2026 延续）"
+snapshot_label = "2026 年卷结构（2024 年起定型，2025–2026 延续；2026.2 补多选部分给分档位）"
 total_score_milli = 150000            # 千分之一分：150 分
 question_count = 19
 structure_note = "8 单选（5 分）+ 3 多选（6 分）+ 3 填空（5 分）+ 5 解答（13/15/15/17/17 分），无选做题"
@@ -28,7 +28,7 @@ score_split_confidence = "medium"     # 解答题逐题分值：2024–2025 公�
 [provenance]
 verified_at = "2026-11-02"
 confidence = "high"
-basis = "official-analysis"
+basis = "public-analysis"
 source_ids = ["S1", "S2", "S3", "S4", "S5", "S8", "S10"]
 disclaimer = "仅记录结构与分值；不含题目原文；评分项骨架为通用占位，不是官方评分细则，须教师逐项确认后方可用于判分。"
 
@@ -196,16 +196,55 @@ depends_on = []
 placeholder = true
 
 [skeletons.objective-multiple]
-scoring_mode = "全对才给分"
-label = "客观题·多选"
-scoring_note = "官方 2024 年起部分给分规则（供教师建模参考，非本骨架自动实现）：全部选对得满分；有错选得 0 分；部分选对且无错选时，2 个正确选项选对 1 个得 3 分，3 个正确选项选对 1 个得 2 分、选对 2 个得 4 分。v1 骨架只给「全对」单档，需要部分给分的教师应按当年细则改写评分项（见 README「已知限制」）。"
+scoring_mode = "按选项部分给分"
+label = "客观题·多选（3 个正确选项）"
+scoring_note = "官方 2024 年起新课标卷多选评分口径：全部选对得满分 6 分；无错选时选对 1 个得 2 分、选对 2 个得 4 分；有错选得 0 分。本骨架按「3 个正确选项」登记；若本题答案键为 2 个正确选项，教师应改用 objective-multiple-2（选对 1 个得 3 分）。"
 [[skeletons.objective-multiple.items]]
 ordinal = 1
-criterion = "【模板骨架】选出全部正确选项；有错选不得分（部分选对的给分规则须教师按当年评分细则补充）"
+criterion = "【模板骨架】选出全部正确选项，与答案键一致；有错选不得分"
 ratio_permille = 1000
 required = true
 depends_on = []
 placeholder = true
+
+# 多选部分给分档位（官方口径；total_milli 由套用时的题目满分填充，必须与满分一致）。
+[skeletons.objective-multiple.partial_choice]
+correct_option_count = 3
+wrong_selection_zero = true
+source = "official"
+source_note = "2024 年起新课标卷多选题评分细则：全部选对得 6 分，选对 1 个得 2 分、选对 2 个得 4 分，有错选得 0 分（2025–2026 沿用）"
+
+[[skeletons.objective-multiple.partial_choice.tiers]]
+selected_correct = 1
+points_milli = 2000
+
+[[skeletons.objective-multiple.partial_choice.tiers]]
+selected_correct = 2
+points_milli = 4000
+
+# 同一题型的「2 个正确选项」备选骨架：默认题目引用 objective-multiple，
+# 教师按当年答案键确认正确选项数为 2 时改换本骨架（选对 1 个得满分的一半）。
+[skeletons.objective-multiple-2]
+scoring_mode = "按选项部分给分"
+label = "客观题·多选（2 个正确选项）"
+scoring_note = "官方 2024 年起新课标卷多选评分口径：全部选对得满分 6 分；无错选时选对 1 个得 3 分；有错选得 0 分。"
+[[skeletons.objective-multiple-2.items]]
+ordinal = 1
+criterion = "【模板骨架】选出全部正确选项，与答案键一致；有错选不得分"
+ratio_permille = 1000
+required = true
+depends_on = []
+placeholder = true
+
+[skeletons.objective-multiple-2.partial_choice]
+correct_option_count = 2
+wrong_selection_zero = true
+source = "official"
+source_note = "2024 年起新课标卷多选题评分细则：全部选对得 6 分，选对 1 个得 3 分，有错选得 0 分（2025–2026 沿用）"
+
+[[skeletons.objective-multiple-2.partial_choice.tiers]]
+selected_correct = 1
+points_milli = 3000
 
 [skeletons.objective-blank]
 scoring_mode = "全对才给分"
