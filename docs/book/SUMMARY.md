@@ -18,6 +18,11 @@
 - [工具链与 workspace 配置（M0）](dev/research/toolchain.md)
 - [全国卷数学模板数据（M5 数据）](dev/research/templates.md)
 - [本地推理模型获取、校验与 serving（M0）](dev/research/models.md)
+- [Slint（GUI 外壳）](dev/research/slint.md)
+- [存储与基础依赖（platform / domain / report）](dev/research/deps.md)
+- [图像 / PDF / DOCX（capture 输入管线）](dev/research/pdf.md)
+- [本地推理 serving（OCR + 判定，M4 / 16 GB）](dev/research/inference-serving.md)
+- [CAS sidecar（sympy + uv / Python 3.12）](dev/research/cas.md)
 
 # 架构决策
 

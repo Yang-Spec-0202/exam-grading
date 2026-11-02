@@ -19,3 +19,8 @@
 | `toolchain.md` | Rust/rustup/cargo-deny/mdBook 版本与 workspace 配置依据 | 已完成（M0） |
 | `templates.md` | 全国卷模板数据调研 | 由模板任务维护 |
 | `models.md` | 模型候选、许可、serving 实测 | 由模型任务维护 |
+| `slint.md` | Slint 版本/macOS 构建/窗口-模型-图片-线程 API/中文 IME/许可 | 已完成（T02 · M0） |
+| `deps.md` | rusqlite(bundled)/keyring/tracing/serde/ulid/insta/proptest/image/exif/xlsx/blake3 实测与许可 | 已完成（T02 · M0） |
+| `pdf.md` | PDF 栅格化选型（hayro 纯 Rust vs pdfium-render vs 排除项）+ docx 候选 | 已完成（DOCX 待验证）（T02 · M0） |
+| `inference-serving.md` | llama.cpp/OpenAI 兼容端点/GGUF 可得性/M4 延迟与内存/MLX 对照 | 已完成（4B 判定未复测）（T02 · M0） |
+| `cas.md` | sympy sidecar + uv/Python 3.12 可行性、协议与预算实测 | 已完成（T02 · M0） |
