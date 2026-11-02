@@ -250,8 +250,8 @@ scripts/acceptance/run.sh --quick --skip-bench
 
 ## 7. 结论与下一步
 
-1. **当前仍不满足「M10 验收通过」**：截至最新滚动快照，代码门禁（fmt/clippy/test/deny/docs）已全 PASS（test 1063 passed / 0 failed），但 S1–S14 中仅 S4/S5/S6/S8/S9/S10/S11/S12/S13/S14 具备部分自动化证据；**S1（全流程）、S7（键鼠效率）、S10 端到端抓包、S2/S3 金标集与 L1–L10 阻塞项未关闭**。
-2. **门禁脚本已可用**：`scripts/acceptance/run.sh` 已在本机真实执行并输出 JSON/TSV；最新一次总体为 **WARN（exit 2）**，WARN 仅来自 `egctl doctor/bench` 的就绪度提示（未接线/模型未装齐），代码门禁 0 失败。
-3. **必须先冻结工作区**（并行任务全部合入、四个基础门禁稳定）后重跑脚本，并把结果按 §5 模板写入本文件；冻结前所有数字仅作滚动基线。
+1. **代码门禁已冻结为 PASS**：§6 冻结基线（`run.sh --json --skip-egctl`，2026-11-03T01:37+08:00，exit 0）显示 fmt / clippy / test（1063 passed、0 failed、2 ignored）/ deny / docs-check 全部 PASS，warn=0、fail=0；egctl doctor/bench 两项因 `--skip-egctl` 跳过，其「未接线/模型未装齐」属**就绪度 WARN 语义**（见 `scripts/acceptance/README.md`），不是代码门禁失败。
+2. **产品级验收尚未完成**：S1–S14 中仅 S4/S5/S6/S8/S9/S10/S11/S12/S13/S14 具备部分自动化证据；**S1（全流程 UI 端到端）、S7（键鼠复核效率）、S2/S3/S5（金标集与准确率）、S10 端到端抓包与 L1–L10 阻塞项未关闭**。因此当前结论是「**代码门禁 PASS、产品级验收未完成**」，不可表述为「M10 整体验收通过」。已知限制另见：capture（HEIC/HEIF、DOCX 参考答案文本抽取显式不支持）、inference（v1 无 TLS，`https://` 显式不支持）、app（中文 IME 仅代码路径 + 手工冒烟，无自动化 E2E）。
+3. **门禁脚本可复现**：`scripts/acceptance/run.sh` 已在冻结工作区真实执行并输出 JSON/TSV（§6）；如需 egctl 就绪度快照，去掉 `--skip-egctl` 重跑即得 WARN（exit 2）结果，按 §5 模板记录。工作区已冻结（并行任务全部合入、代码门禁稳定），后续重跑按 §5 模板追加记录。
 4. **建议关闭顺序**：L6 模型权重 → S1 端到端合成夹具 → L10 抓包/崩溃恢复 → S2/S3 金标集 → L1/L4/L8 人工 UI → L2 真实试卷 → L3 TLS（Ask first）。
-5. **夹具/性能文档缺口**（L9）应由 M10 任务补齐：`fixtures/`（合成试卷、页面、预期结果）与 `docs/dev/performance.md`（T39 基线汇总；在此之前性能数字以 §3-S6 与研究记录为准）。
+5. **夹具/性能文档缺口**（L9）：`fixtures/`（合成试卷、页面、预期结果）仍缺；`docs/dev/performance.md` 已建（性能基线），端到端批次数字待后续实测补充，在此之前性能数字以 §3-S6 与研究记录为准。
