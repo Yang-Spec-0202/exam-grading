@@ -1,0 +1,7 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: "ScoreError::Negative { value: -1 }"
+---
+Negative {
+    value: -1,
+}

@@ -1,0 +1,5 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: "ExifOrientation::new(5).unwrap()"
+---
+5

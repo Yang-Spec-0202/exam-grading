@@ -1,0 +1,9 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: "Classroom\n{\n    id: ClassroomId::from_ulid(u(2)), name: \"高一(3)班\".to_owned(), term:\n    \"2026 秋\".to_owned(),\n}"
+---
+{
+  "id": "00000000000000000000000002",
+  "name": "高一(3)班",
+  "term": "2026 秋"
+}

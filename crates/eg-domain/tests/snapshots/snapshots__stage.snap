@@ -1,0 +1,13 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: "[Stage::Capture, Stage::Preprocess, Stage::Recognize, Stage::Align,\nStage::Grade, Stage::Review, Stage::Export]"
+---
+[
+  "capture",
+  "preprocess",
+  "recognize",
+  "align",
+  "grade",
+  "review",
+  "export"
+]

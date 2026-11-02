@@ -1,0 +1,10 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: "[DraftStatus::Draft, DraftStatus::PendingConfirmation, DraftStatus::Confirmed,\nDraftStatus::Rejected]"
+---
+[
+  "draft",
+  "pending_confirmation",
+  "confirmed",
+  "rejected"
+]

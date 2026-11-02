@@ -1,0 +1,8 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: "HashError::InvalidHex\n{ kind: \"ContentHash\", reason: \"长度必须为 64 个字符\", }"
+---
+InvalidHex {
+    kind: "ContentHash",
+    reason: "长度必须为 64 个字符",
+}

@@ -1,0 +1,5 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: u(0x0123_4567_89ab_cdef_0123_4567_89ab_cdef)
+---
+"014D2PF2DBSQQG28T5CY4TQKFF"

@@ -1,0 +1,19 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: "StepEvidence\n{\n    steps:\n    vec![StepMatch\n    {\n        rubric_item: RubricItemId::from_ulid(u(32)), matched: true, evidence:\n        Some(bbox()), note: None,\n    }]\n}"
+---
+{
+  "steps": [
+    {
+      "rubric_item": "00000000000000000000000010",
+      "matched": true,
+      "evidence": {
+        "x": 0.1,
+        "y": 0.2,
+        "w": 0.3,
+        "h": 0.4
+      },
+      "note": null
+    }
+  ]
+}

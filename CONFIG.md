@@ -1,6 +1,6 @@
 # CONFIG：配置项清单与默认值
 
-> 状态：草案 v0.2.2 · 2026-11-02 · **待审批**（v0.2.2：全国卷 active/retired 标注、多选部分给分开关）
+> 状态：草案 v0.2.3 · 2026-11-02 · **待审批**（v0.2.2：全国卷 active/retired 标注、多选部分给分开关；v0.2.3：OCR 默认模型量化说明按实测修订）
 > 用途：所有「可按需调整」的行为集中登记在这里；实现阶段按本表建立设置项，默认值以本表为准。
 > 规则：**不变量不可配置**（证据、门禁、教师确认、审计、离线默认、模式可分辨）；其余尽量可配置；本表不含示例代码。
 > 归属模块列表示「谁读取该配置」，不代表存储位置（存储统一在 `platform`）。
@@ -53,7 +53,7 @@
 
 | 键 | 默认值 | 可选范围 | 说明 | 归属 |
 |---|---|---|---|---|
-| `ocr.model` | PaddleOCR-VL-1.6（0.9B Q4） | 注册表内任一 OCR 模型 | 默认识别模型；可换 GLM-OCR / Xiaomi-OCR-0 等 | inference |
+| `ocr.model` | PaddleOCR-VL-1.6（0.9B；官方 GGUF 为 BF16） | 注册表内任一 OCR 模型 | 默认识别模型；**官方 GGUF 是 BF16（约 1.8GB 双文件），Q4_K_M 仅第三方、默认不启用**（作为可选紧凑 profile，须精度验收后再切换）；可换 GLM-OCR / Xiaomi-OCR-0 等；依据 `docs/dev/research/models.md` §7-D1 | inference |
 | `ocr.emit_latex` | 开 | 开 / 关 | 公式输出 LaTeX（用户已确认可考虑；默认开） | recognize |
 | `ocr.segment_recognition` | 按需 | 关闭 / 按需 / 全量 | 段级识别触发策略 | recognize |
 | `ocr.page_timeout_s` | 60 | 10–180 | 单页识别超时 | inference |

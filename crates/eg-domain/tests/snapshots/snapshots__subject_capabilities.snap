@@ -1,0 +1,15 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: "SubjectCapabilities\n{\n    kinds: vec![QuestionKind::NumericOnly, QuestionKind::MultipleChoice],\n    comparators: vec![ComparatorId::new(\"num_abs\").unwrap()], prompt_version:\n    \"math-judge-v1\".to_owned(), supports_step_scoring: true,\n}"
+---
+{
+  "kinds": [
+    "numeric_only",
+    "multiple_choice"
+  ],
+  "comparators": [
+    "num_abs"
+  ],
+  "prompt_version": "math-judge-v1",
+  "supports_step_scoring": true
+}

@@ -1,0 +1,5 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: "TemplateId::new(\"national-1\").unwrap()"
+---
+"national-1"

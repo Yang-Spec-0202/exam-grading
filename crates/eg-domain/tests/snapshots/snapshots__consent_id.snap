@@ -1,0 +1,5 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: "ConsentId::from_ulid(u(15))"
+---
+"0000000000000000000000000F"

@@ -1,0 +1,5 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: "PaperId::from_ulid(u(3))"
+---
+"00000000000000000000000003"

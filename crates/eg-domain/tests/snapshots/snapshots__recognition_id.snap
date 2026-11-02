@@ -1,0 +1,5 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: "RecognitionId::from_ulid(u(8))"
+---
+"00000000000000000000000008"

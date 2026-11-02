@@ -1,0 +1,5 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: "StudentId::from_ulid(u(1))"
+---
+"00000000000000000000000001"

@@ -1,0 +1,8 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: "Tolerance::new(Some(dec(\"0.01\")), Some(1000)).unwrap()"
+---
+{
+  "absolute": "0.01",
+  "relative_ppm": 1000
+}

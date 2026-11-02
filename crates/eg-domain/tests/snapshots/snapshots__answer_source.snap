@@ -1,0 +1,9 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: "[AnswerSource::Recognition, AnswerSource::ManualCorrection,\nAnswerSource::ElectronicText]"
+---
+[
+  "recognition",
+  "manual_correction",
+  "electronic_text"
+]

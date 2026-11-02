@@ -1,0 +1,5 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: "ModelCallId::from_ulid(u(10))"
+---
+"0000000000000000000000000A"

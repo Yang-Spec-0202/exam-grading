@@ -1,0 +1,15 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: "[ContentRef::Text(\"文本题干\".to_owned()),\nContentRef::Latex(\"$x^2$\".to_owned()),\nContentRef::Asset(AssetId::of(b\"stem\"))]"
+---
+[
+  {
+    "text": "文本题干"
+  },
+  {
+    "latex": "$x^2$"
+  },
+  {
+    "asset": "6692115c7046370acd8e6fac1f99c400df52543e280d46a0df45072d41765c04"
+  }
+]

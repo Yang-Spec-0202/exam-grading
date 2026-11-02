@@ -1,0 +1,11 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: "rubric_item(32, \"写出公式\", 1000)"
+---
+{
+  "id": "00000000000000000000000010",
+  "criterion": "写出公式",
+  "points": 1000,
+  "required": true,
+  "depends_on": []
+}

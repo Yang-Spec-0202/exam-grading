@@ -1,0 +1,9 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: "[SegmentMethod::TemplateRegion, SegmentMethod::LayoutDetection,\nSegmentMethod::Manual]"
+---
+[
+  "template_region",
+  "layout_detection",
+  "manual"
+]

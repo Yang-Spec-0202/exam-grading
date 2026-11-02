@@ -1,0 +1,14 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: "[ManualReason::AnswerKeyMissing, ManualReason::AnswerKeyOmitted,\nManualReason::RubricMissing, ManualReason::RecognitionUnavailable,\nManualReason::LowConfidence, ManualReason::OutOfScope,\nManualReason::ConflictUnresolved, ManualReason::BackendUnavailable]"
+---
+[
+  "answer_key_missing",
+  "answer_key_omitted",
+  "rubric_missing",
+  "recognition_unavailable",
+  "low_confidence",
+  "out_of_scope",
+  "conflict_unresolved",
+  "backend_unavailable"
+]

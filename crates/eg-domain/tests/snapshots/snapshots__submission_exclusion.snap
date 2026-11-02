@@ -1,0 +1,10 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: "SubmissionExclusion\n{\n    submission_id: SubmissionId::from_ulid(u(52)), reason:\n    ExcludeReason::Absent, note: \"缺考\".to_owned(), at: ts(),\n}"
+---
+{
+  "submission_id": "0000000000000000000000001M",
+  "reason": "absent",
+  "note": "缺考",
+  "at": "2026-11-02T08:30:00Z"
+}

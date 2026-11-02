@@ -1,0 +1,13 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: "[ReviewReasonKind::LowConfidence, ReviewReasonKind::Conflict,\nReviewReasonKind::Ungradable, ReviewReasonKind::MissingEvidence,\nReviewReasonKind::UncalibratedModel, ReviewReasonKind::BackendUnavailable,\nReviewReasonKind::InvalidScore]"
+---
+[
+  "low_confidence",
+  "conflict",
+  "ungradable",
+  "missing_evidence",
+  "uncalibrated_model",
+  "backend_unavailable",
+  "invalid_score"
+]

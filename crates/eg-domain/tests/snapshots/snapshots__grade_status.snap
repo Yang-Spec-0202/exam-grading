@@ -1,0 +1,10 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: "[GradeStatus::AutoAccepted, GradeStatus::NeedsReview,\nGradeStatus::ManuallyReviewed, GradeStatus::Excluded]"
+---
+[
+  "auto_accepted",
+  "needs_review",
+  "manually_reviewed",
+  "excluded"
+]

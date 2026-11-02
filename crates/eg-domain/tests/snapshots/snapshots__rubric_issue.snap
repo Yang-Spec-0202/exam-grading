@@ -1,0 +1,11 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: issue()
+---
+{
+  "severity": "error",
+  "item": {
+    "ordinal": 2
+  },
+  "message": "分值合计不等于题目满分"
+}

@@ -1,0 +1,12 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: "[RubricItemRef::Item(RubricItemId::from_ulid(u(32))),\nRubricItemRef::Ordinal(2)]"
+---
+[
+  {
+    "item": "00000000000000000000000010"
+  },
+  {
+    "ordinal": 2
+  }
+]

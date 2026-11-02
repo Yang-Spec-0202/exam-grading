@@ -23,6 +23,7 @@
 - [图像 / PDF / DOCX（capture 输入管线）](dev/research/pdf.md)
 - [本地推理 serving（OCR + 判定，M4 / 16 GB）](dev/research/inference-serving.md)
 - [CAS sidecar（sympy + uv / Python 3.12）](dev/research/cas.md)
+- [domain（领域类型、值对象与学科契约，T04–T06）](dev/research/domain.md)
 
 # 架构决策
 

@@ -1,0 +1,8 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: "[GradeMode::Standard, GradeMode::Fast]"
+---
+[
+  "standard",
+  "fast"
+]

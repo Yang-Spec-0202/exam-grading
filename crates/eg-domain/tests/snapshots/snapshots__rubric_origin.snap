@@ -1,0 +1,27 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: "[RubricOrigin::TeacherHandwritten\n{ confirmed_by: LOCAL_TEACHER.to_owned(), confirmed_at: ts() },\nRubricOrigin::StandardTemplate\n{\n    template_id: TemplateId::new(\"national-2\").unwrap(), template_version: 1,\n    confirmed_by: LOCAL_TEACHER.to_owned(), confirmed_at: ts()\n}, RubricOrigin::ModelStructured\n{\n    model_call_id: ModelCallId::from_ulid(u(43)), confirmed_by:\n    LOCAL_TEACHER.to_owned(), confirmed_at: ts()\n}]"
+---
+[
+  {
+    "teacher_handwritten": {
+      "confirmed_by": "local-teacher",
+      "confirmed_at": "2026-11-02T08:30:00Z"
+    }
+  },
+  {
+    "standard_template": {
+      "template_id": "national-2",
+      "template_version": 1,
+      "confirmed_by": "local-teacher",
+      "confirmed_at": "2026-11-02T08:30:00Z"
+    }
+  },
+  {
+    "model_structured": {
+      "model_call_id": "0000000000000000000000001B",
+      "confirmed_by": "local-teacher",
+      "confirmed_at": "2026-11-02T08:30:00Z"
+    }
+  }
+]

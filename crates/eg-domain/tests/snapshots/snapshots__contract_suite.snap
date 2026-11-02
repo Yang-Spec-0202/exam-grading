@@ -1,0 +1,122 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: "ContractSuite\n{\n    cases:\n    vec![ContractCase\n    {\n        question: question(AnswerKey::RubricOnly), key: concrete_key(), raw:\n        raw_answer(), correct: normalized_answer(), wrong: None, malformed:\n        NormalizedAnswer\n        {\n            text: \"\\\\bad\".to_owned(), latex: None, value: None, steps:\n            Vec::new(),\n        },\n    }],\n}"
+---
+{
+  "cases": [
+    {
+      "question": {
+        "id": "0000000000000000000000000N",
+        "paper_id": "0000000000000000000000000B",
+        "ordinal": 2,
+        "label": "17(2)",
+        "kind": "calculation",
+        "max_score": 2500,
+        "stem": {
+          "latex": "求 $x$ 的值"
+        },
+        "key": "rubric_only",
+        "rubric": {
+          "id": "0000000000000000000000000Z",
+          "version": 2,
+          "items": [
+            {
+              "id": "00000000000000000000000010",
+              "criterion": "写出公式",
+              "points": 1000,
+              "required": true,
+              "depends_on": []
+            },
+            {
+              "id": "00000000000000000000000011",
+              "criterion": "得出结果",
+              "points": 1500,
+              "required": true,
+              "depends_on": []
+            }
+          ],
+          "mode": "stepwise",
+          "total": 2500,
+          "origin": {
+            "standard_template": {
+              "template_id": "national-1",
+              "template_version": 2,
+              "confirmed_by": "local-teacher",
+              "confirmed_at": "2026-11-02T08:30:00Z"
+            }
+          },
+          "partial_choice": null
+        },
+        "subject_hint": "math",
+        "knowledge_tags": [
+          "函数",
+          "方程"
+        ]
+      },
+      "key": {
+        "primary": {
+          "number": {
+            "value": "2.5",
+            "unit": "cm",
+            "tolerance": {
+              "absolute": "0.01",
+              "relative_ppm": 1000
+            }
+          }
+        },
+        "alternatives": [
+          {
+            "expression": "\\frac{5}{2}"
+          }
+        ],
+        "comparators": [
+          "num_abs"
+        ]
+      },
+      "raw": {
+        "text": "2.5",
+        "latex": "2.5",
+        "blocks": [
+          {
+            "kind": "formula",
+            "bbox": {
+              "x": 0.1,
+              "y": 0.2,
+              "w": 0.3,
+              "h": 0.4
+            },
+            "text": "x^2+1",
+            "latex": "x^2+1",
+            "confidence": 0.97
+          }
+        ],
+        "source": "recognition"
+      },
+      "correct": {
+        "text": "2.5",
+        "latex": "2.5",
+        "value": {
+          "number": {
+            "value": "2.5",
+            "unit": "cm",
+            "tolerance": null
+          }
+        },
+        "steps": [
+          {
+            "ordinal": 1,
+            "text": "2.5",
+            "latex": "2.5"
+          }
+        ]
+      },
+      "wrong": null,
+      "malformed": {
+        "text": "\\bad",
+        "latex": null,
+        "value": null,
+        "steps": []
+      }
+    }
+  ]
+}

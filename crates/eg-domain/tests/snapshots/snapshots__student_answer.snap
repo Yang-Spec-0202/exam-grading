@@ -1,0 +1,44 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: student_answer()
+---
+{
+  "submission_id": "0000000000000000000000001M",
+  "question_id": "0000000000000000000000000N",
+  "recognition_id": "00000000000000000000000019",
+  "segment_id": "0000000000000000000000001Y",
+  "raw": {
+    "text": "2.5",
+    "latex": "2.5",
+    "blocks": [
+      {
+        "kind": "formula",
+        "bbox": {
+          "x": 0.1,
+          "y": 0.2,
+          "w": 0.3,
+          "h": 0.4
+        },
+        "text": "x^2+1",
+        "latex": "x^2+1",
+        "confidence": 0.97
+      }
+    ],
+    "source": "recognition"
+  },
+  "parts": [
+    {
+      "page_id": "0000000000000000000000001X",
+      "segment_id": "0000000000000000000000001Y",
+      "recognition_id": "00000000000000000000000019",
+      "bbox": {
+        "x": 0.1,
+        "y": 0.2,
+        "w": 0.3,
+        "h": 0.4
+      },
+      "text": "2.5"
+    }
+  ],
+  "recognition_confidence": 0.88
+}

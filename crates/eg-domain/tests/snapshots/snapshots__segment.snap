@@ -1,0 +1,17 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: "Segment\n{\n    id: SegmentId::from_ulid(u(62)), page_id: PageId::from_ulid(u(61)),\n    question_id: Some(QuestionId::from_ulid(u(21))), bbox: bbox(), crop:\n    AssetId::of(b\"crop\"), method: SegmentMethod::LayoutDetection,\n}"
+---
+{
+  "id": "0000000000000000000000001Y",
+  "page_id": "0000000000000000000000001X",
+  "question_id": "0000000000000000000000000N",
+  "bbox": {
+    "x": 0.1,
+    "y": 0.2,
+    "w": 0.3,
+    "h": 0.4
+  },
+  "crop": "e716ab702c3df6e47a2a43369601d6e198226c5820540d6d31d7a7e648039dc1",
+  "method": "layout_detection"
+}

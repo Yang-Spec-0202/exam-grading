@@ -1,0 +1,70 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: grade_record()
+---
+{
+  "id": "0000000000000000000000001K",
+  "submission_id": "0000000000000000000000001M",
+  "question_id": "0000000000000000000000000N",
+  "revision": 2,
+  "mode": "fast",
+  "route": "rule_then_model",
+  "route_trace": {
+    "rule_id": "R3",
+    "inputs_hash": "32381523e63197c929b67f793a8098bed0ae3a6fa902634fdbcc6fa4567f3346",
+    "classifier_call": "0000000000000000000000001B",
+    "decided_at": "2026-11-02T08:30:00Z"
+  },
+  "judgement": {
+    "match": {
+      "score": 2500,
+      "reason": "与参考答案一致",
+      "evidence": [
+        {
+          "asset": "3033156cfa1afb106292ace000ac284661db7ac748800d8ab74711bd9b6e4091"
+        },
+        {
+          "recognition": "00000000000000000000000019"
+        },
+        {
+          "comparator_trace": "0000000000000000000000001A"
+        },
+        {
+          "model_call": "0000000000000000000000001B"
+        }
+      ]
+    }
+  },
+  "awarded": 2500,
+  "max_score": 2500,
+  "confidence": 0.92,
+  "status": "needs_review",
+  "evidence": [
+    {
+      "asset": "3033156cfa1afb106292ace000ac284661db7ac748800d8ab74711bd9b6e4091"
+    },
+    {
+      "recognition": "00000000000000000000000019"
+    },
+    {
+      "comparator_trace": "0000000000000000000000001A"
+    },
+    {
+      "model_call": "0000000000000000000000001B"
+    }
+  ],
+  "engines": [
+    {
+      "role": "judge",
+      "backend": "local_server",
+      "model_id": "judge-4b",
+      "model_version": "1.0-q4",
+      "prompt_hash": "cf07194ee232eb531e15f690000d19846dea69cf05504782658afcfacb9228a2",
+      "params_hash": "a20b52fae57cc7a99c9651f1b573950fd211823e3ace3bb9c273c06430f24cd3"
+    }
+  ],
+  "created_at": "2026-11-02T08:30:00Z",
+  "reviewed_at": null,
+  "review_note": null,
+  "sampled": true
+}

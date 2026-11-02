@@ -1,0 +1,9 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: "PartialChoiceTier\n{\n    selected_correct: 1, points: milli(2000), label:\n    Some(\"选对 1 个\".to_owned()),\n}"
+---
+{
+  "selected_correct": 1,
+  "points": 2000,
+  "label": "选对 1 个"
+}

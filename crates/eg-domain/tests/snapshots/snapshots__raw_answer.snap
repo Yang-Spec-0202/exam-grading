@@ -1,0 +1,23 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: raw_answer()
+---
+{
+  "text": "2.5",
+  "latex": "2.5",
+  "blocks": [
+    {
+      "kind": "formula",
+      "bbox": {
+        "x": 0.1,
+        "y": 0.2,
+        "w": 0.3,
+        "h": 0.4
+      },
+      "text": "x^2+1",
+      "latex": "x^2+1",
+      "confidence": 0.97
+    }
+  ],
+  "source": "recognition"
+}

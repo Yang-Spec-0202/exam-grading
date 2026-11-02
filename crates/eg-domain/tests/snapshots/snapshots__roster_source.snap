@@ -1,0 +1,9 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: "[RosterSource::RosterImport, RosterSource::ManualAdd,\nRosterSource::FileNameInferred]"
+---
+[
+  "roster_import",
+  "manual_add",
+  "file_name_inferred"
+]

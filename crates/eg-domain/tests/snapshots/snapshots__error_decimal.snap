@@ -1,0 +1,7 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: "DecimalError::Format { input: \"1.2.3\".to_owned() }"
+---
+Format {
+    input: "1.2.3",
+}

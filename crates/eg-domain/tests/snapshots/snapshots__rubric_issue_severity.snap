@@ -1,0 +1,8 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: "[RubricIssueSeverity::Warning, RubricIssueSeverity::Error]"
+---
+[
+  "warning",
+  "error"
+]

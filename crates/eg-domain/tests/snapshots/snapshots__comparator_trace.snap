@@ -1,0 +1,17 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: "ComparatorTrace\n{\n    id: ComparatorTraceId::from_ulid(u(42)), comparator:\n    ComparatorId::new(\"num_abs\").unwrap(), verdict:\n    ComparatorVerdict::Equivalent\n    { note: \"分数与小数等价\".to_owned() }, detail:\n    serde_json::json!({\"expected\": \"2.5\", \"actual\": \"2.50\"}),\n}"
+---
+{
+  "id": "0000000000000000000000001A",
+  "comparator": "num_abs",
+  "verdict": {
+    "equivalent": {
+      "note": "分数与小数等价"
+    }
+  },
+  "detail": {
+    "actual": "2.50",
+    "expected": "2.5"
+  }
+}

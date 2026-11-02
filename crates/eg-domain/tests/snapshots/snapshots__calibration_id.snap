@@ -1,0 +1,5 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: "CalibrationId::new(\"cal-2026\").unwrap()"
+---
+"cal-2026"

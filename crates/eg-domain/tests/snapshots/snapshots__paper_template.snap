@@ -1,0 +1,21 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: "PaperTemplate\n{\n    paper_id: PaperId::from_ulid(u(11)), version: 3, page_count: 2, regions:\n    vec![TemplateRegion\n    { page_no: 1, question_id: QuestionId::from_ulid(u(21)), bbox: bbox(), }],\n}"
+---
+{
+  "paper_id": "0000000000000000000000000B",
+  "version": 3,
+  "page_count": 2,
+  "regions": [
+    {
+      "page_no": 1,
+      "question_id": "0000000000000000000000000N",
+      "bbox": {
+        "x": 0.1,
+        "y": 0.2,
+        "w": 0.3,
+        "h": 0.4
+      }
+    }
+  ]
+}

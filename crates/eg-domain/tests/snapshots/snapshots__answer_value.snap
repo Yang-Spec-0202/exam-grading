@@ -1,0 +1,39 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: "[AnswerValue::Text(\"答案\".to_owned()), AnswerValue::Number\n{ value: dec(\"2.5\"), unit: Some(\"cm\".to_owned()), tolerance: None },\nAnswerValue::Expression(\"\\\\frac{5}{2}\".to_owned()),\nAnswerValue::Options(vec![\"A\".to_owned(), \"B\".to_owned()]),\nAnswerValue::Steps(vec![AnswerValue::Text(\"x=1\".to_owned())]),\nAnswerValue::Structured(serde_json::json!({\"kind\": \"interval\", \"lo\": 0, \"hi\":\n    1}))]"
+---
+[
+  {
+    "text": "答案"
+  },
+  {
+    "number": {
+      "value": "2.5",
+      "unit": "cm",
+      "tolerance": null
+    }
+  },
+  {
+    "expression": "\\frac{5}{2}"
+  },
+  {
+    "options": [
+      "A",
+      "B"
+    ]
+  },
+  {
+    "steps": [
+      {
+        "text": "x=1"
+      }
+    ]
+  },
+  {
+    "structured": {
+      "hi": 1,
+      "kind": "interval",
+      "lo": 0
+    }
+  }
+]

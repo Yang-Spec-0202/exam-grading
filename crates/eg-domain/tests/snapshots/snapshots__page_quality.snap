@@ -1,0 +1,11 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: page().quality.clone()
+---
+{
+  "blur_var": 180.5,
+  "exposure": 0.45,
+  "skew_deg": 1.2,
+  "resolution_ok": true,
+  "verdict": "acceptable"
+}

@@ -1,0 +1,5 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: "ClassroomId::from_ulid(u(2))"
+---
+"00000000000000000000000002"

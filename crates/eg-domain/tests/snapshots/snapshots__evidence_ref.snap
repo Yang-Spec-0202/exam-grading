@@ -1,0 +1,18 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: evidence()
+---
+[
+  {
+    "asset": "3033156cfa1afb106292ace000ac284661db7ac748800d8ab74711bd9b6e4091"
+  },
+  {
+    "recognition": "00000000000000000000000019"
+  },
+  {
+    "comparator_trace": "0000000000000000000000001A"
+  },
+  {
+    "model_call": "0000000000000000000000001B"
+  }
+]

@@ -1,0 +1,15 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: "[BlockKind::Text, BlockKind::Formula, BlockKind::Table,\nBlockKind::Handwriting, BlockKind::Figure, BlockKind::Stamp,\nBlockKind::Barcode, BlockKind::HeaderFooter, BlockKind::Unknown]"
+---
+[
+  "text",
+  "formula",
+  "table",
+  "handwriting",
+  "figure",
+  "stamp",
+  "barcode",
+  "header_footer",
+  "unknown"
+]

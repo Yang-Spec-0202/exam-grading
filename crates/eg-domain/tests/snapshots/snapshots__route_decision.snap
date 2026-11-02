@@ -1,0 +1,13 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: "[RouteDecision::RuleOnly, RouteDecision::RuleThenModel,\nRouteDecision::ModelDirect, RouteDecision::RubricItemized,\nRouteDecision::Manual(ManualReason::AnswerKeyMissing)]"
+---
+[
+  "rule_only",
+  "rule_then_model",
+  "model_direct",
+  "rubric_itemized",
+  {
+    "manual": "answer_key_missing"
+  }
+]

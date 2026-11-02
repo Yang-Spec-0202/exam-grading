@@ -1,0 +1,9 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: "[DraftOrigin::HandwrittenTransliteration, DraftOrigin::ModelStructured,\nDraftOrigin::TemplateApplied]"
+---
+[
+  "handwritten_transliteration",
+  "model_structured",
+  "template_applied"
+]

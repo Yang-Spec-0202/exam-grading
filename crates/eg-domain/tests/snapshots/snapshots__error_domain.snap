@@ -1,0 +1,7 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: "DomainError::InvalidRevision { revision: 0 }"
+---
+InvalidRevision {
+    revision: 0,
+}

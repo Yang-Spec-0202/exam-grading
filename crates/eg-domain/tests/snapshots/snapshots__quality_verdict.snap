@@ -1,0 +1,13 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: "[QualityVerdict::Good, QualityVerdict::Acceptable, QualityVerdict::Rejected\n{ reason: \"模糊\".to_owned() }]"
+---
+[
+  "good",
+  "acceptable",
+  {
+    "rejected": {
+      "reason": "模糊"
+    }
+  }
+]

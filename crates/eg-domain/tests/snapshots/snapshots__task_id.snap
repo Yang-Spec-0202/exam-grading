@@ -1,0 +1,5 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: "TaskId::from_ulid(u(14))"
+---
+"0000000000000000000000000E"

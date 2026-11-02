@@ -1,0 +1,37 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: rubric_draft()
+---
+{
+  "id": "00000000000000000000000027",
+  "question_id": "0000000000000000000000000N",
+  "status": "pending_confirmation",
+  "items": [
+    {
+      "criterion": "写出公式",
+      "points": 1000,
+      "required": true,
+      "depends_on": []
+    },
+    {
+      "criterion": "得出结果",
+      "points": 1500,
+      "required": false,
+      "depends_on": [
+        1
+      ]
+    }
+  ],
+  "raw_text": "写出公式得 1 分，得出结果得 1.5 分",
+  "origin": "model_structured",
+  "model_call_id": "00000000000000000000000028",
+  "validation": [
+    {
+      "severity": "warning",
+      "item": null,
+      "message": "判据与模板占位相似"
+    }
+  ],
+  "created_at": "2026-11-02T08:30:00Z",
+  "confirmed_at": null
+}

@@ -1,0 +1,11 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: "[ExcludeReason::Absent, ExcludeReason::Invalid, ExcludeReason::Duplicate,\nExcludeReason::OutOfScope, ExcludeReason::Other]"
+---
+[
+  "absent",
+  "invalid",
+  "duplicate",
+  "out_of_scope",
+  "other"
+]

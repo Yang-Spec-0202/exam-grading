@@ -1,0 +1,10 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: "[ModelRole::Ocr, ModelRole::Router, ModelRole::Judge, ModelRole::Structurer]"
+---
+[
+  "ocr",
+  "router",
+  "judge",
+  "structurer"
+]

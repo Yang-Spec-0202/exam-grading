@@ -1,0 +1,12 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: "[JudgedUnit::RubricItem(RubricItemId::from_ulid(u(32))),\nJudgedUnit::Choice(\"A\".to_owned())]"
+---
+[
+  {
+    "rubric_item": "00000000000000000000000010"
+  },
+  {
+    "choice": "A"
+  }
+]

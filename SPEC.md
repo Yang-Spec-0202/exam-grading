@@ -1,6 +1,7 @@
 # SPEC：自动作业批改系统（exam-grading）
 
-> 状态：草案 v0.2 · 2026-11-01 · **待审批**（只定义「是什么/怎么验收」，不含实现，**不含任何示例代码**）
+> 状态：草案 v0.2.3 · 2026-11-02 · **待审批**（只定义「是什么/怎么验收」，不含实现，**不含任何示例代码**）
+> v0.2.3 摘要（按 tech-spike 实测修订）：OCR 官方 GGUF 为 BF16、Q4 仅第三方且默认不启用；OCR 有效分辨率受 mmproj 下采样约 1MP 限制（密集小字靠版面分块而非提高 DPI）；推理 serving 默认仅 llama.cpp；§4 选型补实测版本（hayro 0.8.0 / sympy 1.14 + Python 3.12 / rust_xlsxwriter 0.102 / Slint 1.18.1）。依据：`docs/dev/research/` 下的 `models.md`、`inference-serving.md`、`pdf.md`、`cas.md`、`deps.md`、`slint.md`。
 > 关联：`CAPABILITY-MAP.md`（模块索引）· `SPEC-<module-id>.md`（12 份模块规范）
 > 本轮变更见 §11；与 v0.1 的差异全部来自用户 2026-11-01 的 8 条答复与 2 条额外要求。
 
@@ -31,7 +32,7 @@
 | A2 | **学生身份只看文件名**（用户明确「不管」不规范文件名）：文件选择时提示按「学生名/学号」命名；文件名未命中名单即未决人工选择；OCR/姓名兜底默认关闭 | `align` 身份判定简化；`report` 导出命名以文件名称为准；`capture`/`app` 负责提醒 |
 | A3 | 参考答案来源全部支持；评分规则可手写/模板/模型整理，但**必须教师确认**才生效 | 新增 `rubric` 模块；模型只做「格式整理」，不改判分口径 |
 | A4 | 数学符号覆盖根式/三角/向量/矩阵/区间/集合；微积分/复数/几何证明超出即转模型/人工（用户已接受） | `subject-math` CAS 适配层默认 sympy（开放许可；求职展示项目）；超出范围 → 模型/人工 |
-| A5 | 目标机 Apple Silicon / 16GB；本地模型 0.8–4B Q4；云端仅兜底 | `inference` 默认本地方案 |
+| A5 | 目标机 Apple Silicon / 16GB；OCR 0.8–1.3B（官方 GGUF 为 BF16，可选第三方 Q4）、判定 4B Q4_K_M；云端仅兜底 | `inference` 默认本地方案；量化取舍依据 `docs/dev/research/models.md` §7-D1 |
 | A6 | 默认离线；云端仅在一次任务获得授权后可用，授权随任务结束失效 | `inference` + `platform` 任务级鉴权 |
 | A7 | 不做分发打包（无 .app/DMG/公证）；开发机直接运行 | 不写打包流水线；`cargo run` 为交付形态 |
 | A8 | 原图保留在本机、不自动清理；数据库与资产目录随工作区迁移 | 留存策略 = 永久；无清理任务 |
@@ -63,18 +64,19 @@
 | 层 | 选型 | 说明 |
 |---|---|---|
 | 语言 | Rust（edition 2024，stable） | MSRV = 立项时 stable 向下兼容 2 个小版本 |
-| GUI | Slint 1.18.x（不低于 1.14，以 `cargo add` 落地为准并锁定） | 原生桌面，无 WebView |
+| GUI | Slint 1.18.1（实测锁定；1.19 未发布；不低于 1.14） | 原生桌面，无 WebView；中文 IME 见 `SPEC-app.md` 手测清单；依据 `docs/dev/research/slint.md` |
 | 并发 | 标准线程 + 有界通道 + CPU 线程池 | 不引入 async 运行时；UI 线程零阻塞 |
 | 存储 | SQLite（单写连接 + WAL）、内容寻址资产库（BLAKE3） | 单机单写者；迁移只追加 |
 | 序列化 | serde（JSON/TOML），模型输出用严格 Schema | 模型输出一律视为不可信输入 |
 | 图像 | 图像解码/缩放/EXIF 库（以 `cargo add` 落地为准） | 解码在工作线程 |
-| PDF | PDF 渲染库（优先纯 Rust 或随包动态库），Plan 阶段验证 | 失败则 v1 仅图片/扫描 |
-| 表格导出 | Rust XLSX 写入库 + CSV + 单文件 HTML | 版本以 `cargo add` 为准 |
-| OCR/文档解析 | 默认 PaddleOCR-VL-1.6（0.9B Q4，Apache-2.0），注册表内可换；公式输出 LaTeX | 本地 sidecar，默认离线 |
-| 符号计算 | CAS 适配层：默认 sympy sidecar（BSD-3，开放许可；项目为求职展示，用户已确认可接受） | 用于三角恒等/矩阵/集合等价；不可用/超时则降级为无法判定 |
+| PDF | hayro 0.8.0（纯 Rust，Apache-2.0/MIT；实测可渲染中文公文，A4@300DPI 14.8–25.0ms） | 不支持加密/口令 PDF（显式报错）；**默认透明背景，送 OCR 前必须合成白底**；依据 `docs/dev/research/pdf.md` |
+| 表格导出 | rust_xlsxwriter 0.102 + CSV + 单文件 HTML | 实测中文表名/加粗表头/列宽可用；依据 `docs/dev/research/deps.md` |
+| OCR/文档解析 | 默认 PaddleOCR-VL-1.6（0.9B；**官方 GGUF 为 BF16、约 1.8GB 双文件**；Q4_K_M 仅第三方、**默认不启用**、作为可选 profile 须精度验收后再切换），注册表内可换；公式输出 LaTeX | 本地 sidecar，默认离线；OCR 输入被 mmproj 下采样到约 1MP（`image_max_pixels=1003520`），密集小字页需**版面分块**，抬高 PDF DPI 无效；依据 `docs/dev/research/models.md`、`inference-serving.md` |
+| 符号计算 | CAS 适配层：sympy 1.14 sidecar + Python 3.12（由 uv 托管，不要求用户手装；BSD-3） | 用于三角恒等/矩阵/集合等价；不可用/超时（3s）则降级为无法判定；依据 `docs/dev/research/cas.md` |
 | 错误/日志 | 类型化错误 + `tracing` 结构化日志（JSONL） | 库不 panic |
 | 测试 | 单元 + 性质 + 快照 + 夹具回放 + 端到端 | 不依赖真实模型 |
-| 质量 | fmt / clippy 严格模式 / cargo-deny（许可白名单） | 见 §10 |
+| 推理 serving | **llama.cpp 0.8.0**（brew build 11960，MIT，Metal 可用）；MLX（mlx-vlm）实测可跑但整页更慢，仅作显式可选后端、不默认 | v1 默认且仅默认 llama.cpp；Qwen3 系必须关闭 thinking 模式（否则输出为空）；依据 `docs/dev/research/inference-serving.md` |
+| 质量 | fmt / clippy 严格模式 / cargo-deny（10 项许可白名单） | 见 §10.1；依据 `docs/dev/research/deps.md` |
 
 **推理**：模型按「角色 + 能力 + 许可」注册，由 `inference` 统一调用；本地 HTTP sidecar 为主，OpenAI 兼容云端为兜底（按任务授权），录制回放用于测试离线。
 
@@ -175,11 +177,28 @@
 
 ## 10. 边界
 
-**Always**：跑 fmt/clippy/test 全绿再提交；新增依赖过 `cargo deny`（许可白名单 MIT/Apache-2.0/BSD-3/ISC/Unicode-3.0）；判分结果带证据；模型调用记录模型版本/提示词哈希/输入哈希/所在任务；夹具与日志脱敏；数据库迁移只追加；规范变更同步文档。
+**Always**：跑 fmt/clippy/test 全绿再提交；新增依赖过 `cargo deny`（许可白名单 10 项，见 §10.1，fail-closed）；判分结果带证据；模型调用记录模型版本/提示词哈希/输入哈希/所在任务；夹具与日志脱敏；数据库迁移只追加；规范变更同步文档。
 
 **Ask first**：schema/迁移变更；新增 crate/模型/后端/任何联网；修改阈值、模式定义、分数口径、L1 路由表；修改学科契约；修改规范中的任何验收门槛。
 
 **Never**：把学生数据发往未授权后端；把 API Key 写入库/日志/仓库；缺答案时让模型自造答案并据此判分；无证据出分；低置信绕过门禁进最终成绩；静默吞掉失败；**在规范文件里写示例代码**（代码块、JSON、Rust/Slint 片段）；删除失败测试。
+
+### 10.1 依赖许可白名单（v0.2.3 扩展为 10 项）
+
+| 许可证 | 用途与来源 | 依据 |
+|---|---|---|
+| MIT | 多数基础 crate 的默认许可（与 Apache-2.0 双许可者取其一） | `deps.md` |
+| Apache-2.0 | 多数基础 crate；`hayro` 双许可分支之一 | `deps.md`、`pdf.md` |
+| BSD-3-Clause | 图像/PDF 与部分 TLS 依赖链 | `deps.md` |
+| ISC | 少量工具类 crate | `deps.md` |
+| Unicode-3.0 | Unicode 数据 crate | `deps.md` |
+| **GPL-3.0-only** | **Slint 1.18.1** 三重许可表达式（GPL / Royalty-free / 商业）中的 GPL 分支；项目整体采用 GPL-3.0-only，**不启用** Slint Royalty-free 归属方案、不购商业许可 | `slint.md` |
+| **Zlib** | `zlib-rs` → `flate2` → `hayro-syntax`/`png`/`tiff`/`zip`（`rust_xlsxwriter` 压缩）链 | `deps.md`、`pdf.md` |
+| **BSD-2-Clause** | 图像/TLS 链（部分图像编解码或 TLS crate 的 BSD-2 组件，经依赖传递引入） | `deps.md` |
+| **BSL-1.0** | 随 Slint 依赖树附带（Boost Software License） | `slint.md` |
+| **Unlicense** | 随 Slint 依赖树附带 | `slint.md` |
+
+**项目自身许可决策（v0.2.3，与许可评审一致）**：本仓库以 **GPL-3.0-only** 发布（源码分发，仓库内 `LICENSE` 为官方全文；不做二进制打包，见 §2 A7）；依赖许可集合由 `Cargo.lock` 固定、`deny.toml` 作 **fail-closed** 门禁（未列入上表即构建失败，不放宽为 allow-all）；模型权重**不随仓库分发**（存放于应用数据目录，受各自模型许可约束，与代码许可分开审查）。新增或变更白名单仍属 `Ask first`。
 
 ## 11. 本轮变更（v0.1 → v0.2）
 

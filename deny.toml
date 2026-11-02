@@ -2,9 +2,16 @@
 #
 # 依据：
 # - SPEC.md §10「新增依赖过 cargo deny（许可白名单 MIT/Apache-2.0/BSD-3/ISC/Unicode-3.0）」
+#   该 5 项为规范基线；2026-11-02 的许可决策在此基线上追加 5 项（见下方 allow 注释）。
 # - 官方配置文档：https://embarkstudios.github.io/cargo-deny/checks/licenses/cfg.html
 #   （licenses 段；0.20 的 `version` 字段已废弃，未知字段会报错）
 # - 默认模板由 `cargo deny init`（0.20.2）生成后按项目裁剪。
+# - 许可结论来源：docs/dev/research/slint.md（§4/§7）、docs/dev/research/deps.md（§4 Q8）、
+#   docs/dev/research/pdf.md、docs/dev/research/cas.md（均为 2026-11-02 实测记录）。
+#
+# 项目自身许可：**GPL-3.0-only**（全文见仓库根 LICENSE）。
+# 决策口径：求职展示、源码公开；不购买 Slint 商业许可、不启用 Slint Royalty-free
+# 归属方案，因此 Slint 的三重许可按 GPL 分支使用。
 #
 # 原则：fail-closed —— 未显式允许的许可一律拒绝；未知 registry/git 来源一律拒绝。
 # 新增依赖时若触发许可拒绝，先确认许可真实性，再决定：
@@ -25,15 +32,34 @@ feature-depth = 1
 ignore = []
 
 [licenses]
-# SPEC.md §10 许可白名单（SPDX 标识，大小写与拼写必须精确）。
+# 许可白名单（SPDX 标识，大小写与拼写必须精确；SPDX v3.11 列表）。
 # 注意：带例外的许可（如 "Apache-2.0 WITH LLVM-exception"）视为不同许可，
 # 需要单独列出；未列出即拒绝（fail-closed）。
 allow = [
+    # —— 规范基线 5 项（SPEC.md §10）——
     "MIT",
     "Apache-2.0",
     "BSD-3-Clause",
     "ISC",
     "Unicode-3.0",
+    # —— 项目自身许可：Slint 1.18.1 的表达式为
+    #    "GPL-3.0-only OR LicenseRef-Slint-Royalty-free-2.0 OR LicenseRef-Slint-Software-3.0"（11 个包）。
+    #    本项目整体采用 GPL-3.0-only（LICENSE），因此 GPL 分支即满足其表达式；
+    #    不添加 LicenseRef-* 商业/归属分支（不启用 Slint Royalty-free 归属方案、不购商业许可）。
+    #    来源：docs/dev/research/slint.md §4 Q6 / §7 R3（2026-11-02 实测）。
+    "GPL-3.0-only",
+    # —— 图像 / PDF / 压缩链（非 Slint 链即需要这两项）——
+    #    Zlib：zlib-rs → flate2 → hayro-syntax / png / tiff / zip（rust_xlsxwriter）等。
+    #    BSD-2-Clause：TLS/图像链引入（具体包见 deps.md §5 的 cargo deny 输出）。
+    #    来源：docs/dev/research/deps.md §4 Q8 / §5；docs/dev/research/pdf.md。
+    "Zlib",
+    "BSD-2-Clause",
+    # —— Slint 依赖树附带（宽松许可，随框架引入）——
+    #    BSL-1.0（Boost Software License 1.0，×2）：宽松、保留版权声明即可。
+    #    Unlicense（公有领域声明，×1）：无附加义务。
+    #    来源：docs/dev/research/slint.md §4 Q6（2026-11-02 实测的 cargo deny 拒绝清单）。
+    "BSL-1.0",
+    "Unlicense",
 ]
 # 从 LICENSE 文件识别许可时的置信度门槛，使用官方默认值 0.8。
 confidence-threshold = 0.8

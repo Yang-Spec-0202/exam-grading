@@ -1,0 +1,26 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: model_call()
+---
+{
+  "id": "0000000000000000000000001B",
+  "role": "judge",
+  "engine": {
+    "role": "judge",
+    "backend": "openai_compat",
+    "model_id": "judge-4b",
+    "model_version": "1.0-q4",
+    "prompt_hash": "cf07194ee232eb531e15f690000d19846dea69cf05504782658afcfacb9228a2",
+    "params_hash": "a20b52fae57cc7a99c9651f1b573950fd211823e3ace3bb9c273c06430f24cd3"
+  },
+  "task_id": "0000000000000000000000001C",
+  "consent_id": "0000000000000000000000001D",
+  "input_hash": "c96c6d5be8d08a12e7b5cdc1b207fa6b2430974c86803d8891675e76fd992c20",
+  "output": {
+    "judgement": "match",
+    "score": 2500
+  },
+  "latency_ms": 1234,
+  "cost_micros": 4567,
+  "created_at": "2026-11-02T08:30:00Z"
+}

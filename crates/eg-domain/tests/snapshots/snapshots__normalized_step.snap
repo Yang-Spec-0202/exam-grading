@@ -1,0 +1,9 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: "NormalizedStep\n{\n    ordinal: 1, text: \"移项得 x=1\".to_owned(), latex:\n    Some(\"x=1\".to_owned()),\n}"
+---
+{
+  "ordinal": 1,
+  "text": "移项得 x=1",
+  "latex": "x=1"
+}

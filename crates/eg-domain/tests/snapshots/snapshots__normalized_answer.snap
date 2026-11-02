@@ -1,0 +1,22 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: normalized_answer()
+---
+{
+  "text": "2.5",
+  "latex": "2.5",
+  "value": {
+    "number": {
+      "value": "2.5",
+      "unit": "cm",
+      "tolerance": null
+    }
+  },
+  "steps": [
+    {
+      "ordinal": 1,
+      "text": "2.5",
+      "latex": "2.5"
+    }
+  ]
+}

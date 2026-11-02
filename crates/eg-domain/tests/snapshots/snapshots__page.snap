@@ -1,0 +1,25 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: page()
+---
+{
+  "id": "0000000000000000000000001X",
+  "submission_id": "0000000000000000000000001M",
+  "page_no": 1,
+  "asset": "77d1f35e34a6c8c8e65a32cf0336e1fccc3fb4d1c611ebe09970dd2074abe5dc",
+  "width": 1600,
+  "height": 1200,
+  "rotation_applied": 90,
+  "exif_orientation": 6,
+  "quality": {
+    "blur_var": 180.5,
+    "exposure": 0.45,
+    "skew_deg": 1.2,
+    "resolution_ok": true,
+    "verdict": "acceptable"
+  },
+  "derived": [
+    "025b0c2e96508b56beb196dcd98d8e7af88f83b49caf8e2633cd7d5997bf3f6c",
+    "22c133a0b5f2798b0a717d38038394a38d395c35e2f15539234c55ae02d26202"
+  ]
+}

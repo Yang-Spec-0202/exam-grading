@@ -1,0 +1,19 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: "[SubmissionStatus::Imported, SubmissionStatus::Preprocessed,\nSubmissionStatus::Recognized, SubmissionStatus::Aligned,\nSubmissionStatus::Graded, SubmissionStatus::Reviewed,\nSubmissionStatus::Exported, SubmissionStatus::Failed\n{ stage: Stage::Recognize, message: \"模型不可用\".to_owned() }]"
+---
+[
+  "imported",
+  "preprocessed",
+  "recognized",
+  "aligned",
+  "graded",
+  "reviewed",
+  "exported",
+  {
+    "failed": {
+      "stage": "recognize",
+      "message": "模型不可用"
+    }
+  }
+]

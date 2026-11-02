@@ -1,0 +1,8 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: "IdError::InvalidUlid\n{ input: \"short\".to_owned(), reason: \"长度必须为 26 字符\".to_owned(), }"
+---
+InvalidUlid {
+    input: "short",
+    reason: "长度必须为 26 字符",
+}

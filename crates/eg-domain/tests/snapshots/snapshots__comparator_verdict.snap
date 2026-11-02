@@ -1,0 +1,22 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: "[ComparatorVerdict::Equal, ComparatorVerdict::Equivalent\n{ note: \"恒等变形\".to_owned() }, ComparatorVerdict::NotEqual\n{ reason: \"差值超出容差\".to_owned() }, ComparatorVerdict::Undecidable\n{ reason: \"超出支持范围\".to_owned() }]"
+---
+[
+  "equal",
+  {
+    "equivalent": {
+      "note": "恒等变形"
+    }
+  },
+  {
+    "not_equal": {
+      "reason": "差值超出容差"
+    }
+  },
+  {
+    "undecidable": {
+      "reason": "超出支持范围"
+    }
+  }
+]

@@ -1,0 +1,12 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: "engine(ModelRole::Ocr, false)"
+---
+{
+  "role": "ocr",
+  "backend": "local_server",
+  "model_id": "judge-4b",
+  "model_version": "1.0-q4",
+  "prompt_hash": "cf07194ee232eb531e15f690000d19846dea69cf05504782658afcfacb9228a2",
+  "params_hash": "a20b52fae57cc7a99c9651f1b573950fd211823e3ace3bb9c273c06430f24cd3"
+}

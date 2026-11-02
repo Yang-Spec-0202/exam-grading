@@ -1,0 +1,10 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: "[ScoringMode::Additive, ScoringMode::AllOrNothing, ScoringMode::Stepwise,\nScoringMode::PartialChoice]"
+---
+[
+  "additive",
+  "all_or_nothing",
+  "stepwise",
+  "partial_choice"
+]

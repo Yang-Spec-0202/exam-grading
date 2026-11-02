@@ -112,3 +112,19 @@ bash scripts/ci.sh          # fmt + clippy + test + deny + 文档门禁
 
 - 默认全部本地处理；云端推理默认关闭，需按任务授权（`SPEC-inference.md`）。
 - 原图按内容哈希只读保存、永久保留；日志与诊断包脱敏；API Key 只从环境变量/Keychain 读取，不入库、不入日志。
+
+## 许可
+
+- **本项目（exam-grading）整体以 GPL-3.0-only 发布**：GNU General Public License v3.0，仅此版本（不含 "or later"），
+  完整官方文本见仓库根目录 [`LICENSE`](LICENSE)。口径：个人求职展示、源码公开，不采用商业许可。
+- **Slint（GUI 框架）**：Slint 1.18.1 为三重许可
+  （`GPL-3.0-only OR LicenseRef-Slint-Royalty-free-2.0 OR LicenseRef-Slint-Software-3.0`）。
+  本项目按其 **GPL-3.0-only 分支**使用：不启用 Slint Royalty-free 的归属（attribution）方案，也不购买商业许可；
+  涉及 Slint 的代码与分发产物同时受 GPL-3.0-only 义务约束。依据：`docs/dev/research/slint.md`。
+- **第三方依赖**：各自保留原始版权与许可，版本由 `Cargo.lock` 固定。合规由 `deny.toml` 白名单 +
+  `cargo deny check` 门禁执行（本地 `scripts/ci.sh` 与 CI 都会跑），未列入白名单的许可默认拒绝（fail-closed）：
+  - 规范基线（`SPEC.md` §10）：MIT、Apache-2.0、BSD-3-Clause、ISC、Unicode-3.0；
+  - 因 Slint 与图像/PDF/压缩链追加：GPL-3.0-only、Zlib、BSD-2-Clause、BSL-1.0、Unlicense
+    （逐条来源与理由见 `deny.toml` 注释及 `docs/dev/research/{slint,deps,pdf}.md`）。
+- **模型权重**：OCR / 判定模型不在本仓库分发，其许可与使用条件见 `docs/dev/research/models.md` 与对应模型卡。
+- **免责**：本项目为个人求职展示，按「现状」提供；不承诺持续维护，也不承诺适用于任何特定用途，使用前请自行评估。

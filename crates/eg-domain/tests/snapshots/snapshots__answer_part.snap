@@ -1,0 +1,16 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: "AnswerPart\n{\n    page_id: PageId::from_ulid(u(61)), segment_id:\n    SegmentId::from_ulid(u(62)), recognition_id:\n    RecognitionId::from_ulid(u(41)), bbox: bbox(), text: \"2.5\".to_owned(),\n}"
+---
+{
+  "page_id": "0000000000000000000000001X",
+  "segment_id": "0000000000000000000000001Y",
+  "recognition_id": "00000000000000000000000019",
+  "bbox": {
+    "x": 0.1,
+    "y": 0.2,
+    "w": 0.3,
+    "h": 0.4
+  },
+  "text": "2.5"
+}

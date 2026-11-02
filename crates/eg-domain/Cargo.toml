@@ -10,3 +10,14 @@ description = "领域类型、不变量、分数与证据模型、学科契约�
 workspace = true
 
 [dependencies]
+blake3 = "1.8.7"
+chrono = { version = "0.4.45", default-features = false, features = ["std", "serde"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = { version = "1.0.154", features = ["float_roundtrip"] }
+sha2 = "0.11.1"
+thiserror = "2.0.21"
+ulid = { version = "3.0.0", features = ["serde"] }
+
+[dev-dependencies]
+insta = { version = "1.49.0", features = ["json"] }
+proptest = "1.12.0"

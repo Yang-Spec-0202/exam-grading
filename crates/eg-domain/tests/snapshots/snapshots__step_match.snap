@@ -1,0 +1,10 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: "StepMatch\n{\n    rubric_item: RubricItemId::from_ulid(u(33)), matched: false, evidence:\n    None, note: Some(\"未定位到步骤\".to_owned()),\n}"
+---
+{
+  "rubric_item": "00000000000000000000000011",
+  "matched": false,
+  "evidence": null,
+  "note": "未定位到步骤"
+}

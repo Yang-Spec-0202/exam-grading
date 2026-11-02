@@ -1,0 +1,16 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: "[QuestionKind::SingleChoice, QuestionKind::MultipleChoice,\nQuestionKind::TrueFalse, QuestionKind::FillInBlank, QuestionKind::NumericOnly,\nQuestionKind::Calculation, QuestionKind::Proof, QuestionKind::ShortAnswer,\nQuestionKind::Essay, QuestionKind::Other]"
+---
+[
+  "single_choice",
+  "multiple_choice",
+  "true_false",
+  "fill_in_blank",
+  "numeric_only",
+  "calculation",
+  "proof",
+  "short_answer",
+  "essay",
+  "other"
+]

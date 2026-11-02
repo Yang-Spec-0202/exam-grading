@@ -1,0 +1,11 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: "Student\n{\n    id: StudentId::from_ulid(u(1)), classroom_id:\n    ClassroomId::from_ulid(u(2)), student_no: \"20260301\".to_owned(), name:\n    \"张三\".to_owned(), source: RosterSource::RosterImport,\n}"
+---
+{
+  "id": "00000000000000000000000001",
+  "classroom_id": "00000000000000000000000002",
+  "student_no": "20260301",
+  "name": "张三",
+  "source": "roster_import"
+}

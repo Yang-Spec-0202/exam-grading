@@ -1,0 +1,9 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: "[RuleTextSource::Handwritten, RuleTextSource::Template,\nRuleTextSource::Imported]"
+---
+[
+  "handwritten",
+  "template",
+  "imported"
+]

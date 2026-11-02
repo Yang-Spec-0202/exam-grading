@@ -1,0 +1,9 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: "[PartialChoiceSource::Official, PartialChoiceSource::TemplateData,\nPartialChoiceSource::TeacherCustom]"
+---
+[
+  "official",
+  "template_data",
+  "teacher_custom"
+]

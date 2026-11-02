@@ -1,0 +1,67 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: "[judgement(), Judgement::Partial\n{\n    score: milli(2000), satisfied: vec![JudgedUnit::Choice(\"A\".to_owned())],\n    missing: vec![JudgedUnit::Choice(\"B\".to_owned())], reason:\n    \"少选\".to_owned()\n}, Judgement::Mismatch\n{\n    score: MilliScore::ZERO, reason: \"答案不一致\".to_owned(), evidence:\n    evidence()\n}, Judgement::Ungradable { reason: UngradableReason::Conflict }]"
+---
+[
+  {
+    "match": {
+      "score": 2500,
+      "reason": "与参考答案一致",
+      "evidence": [
+        {
+          "asset": "3033156cfa1afb106292ace000ac284661db7ac748800d8ab74711bd9b6e4091"
+        },
+        {
+          "recognition": "00000000000000000000000019"
+        },
+        {
+          "comparator_trace": "0000000000000000000000001A"
+        },
+        {
+          "model_call": "0000000000000000000000001B"
+        }
+      ]
+    }
+  },
+  {
+    "partial": {
+      "score": 2000,
+      "satisfied": [
+        {
+          "choice": "A"
+        }
+      ],
+      "missing": [
+        {
+          "choice": "B"
+        }
+      ],
+      "reason": "少选"
+    }
+  },
+  {
+    "mismatch": {
+      "score": 0,
+      "reason": "答案不一致",
+      "evidence": [
+        {
+          "asset": "3033156cfa1afb106292ace000ac284661db7ac748800d8ab74711bd9b6e4091"
+        },
+        {
+          "recognition": "00000000000000000000000019"
+        },
+        {
+          "comparator_trace": "0000000000000000000000001A"
+        },
+        {
+          "model_call": "0000000000000000000000001B"
+        }
+      ]
+    }
+  },
+  {
+    "ungradable": {
+      "reason": "conflict"
+    }
+  }
+]

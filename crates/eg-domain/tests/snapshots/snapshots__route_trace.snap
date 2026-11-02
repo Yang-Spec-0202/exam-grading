@@ -1,0 +1,10 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: "RouteTrace\n{\n    rule_id: \"R3\".to_owned(), inputs_hash: Sha256Hex::of(b\"inputs\"),\n    classifier_call: None, decided_at: ts(),\n}"
+---
+{
+  "rule_id": "R3",
+  "inputs_hash": "32381523e63197c929b67f793a8098bed0ae3a6fa902634fdbcc6fa4567f3346",
+  "classifier_call": null,
+  "decided_at": "2026-11-02T08:30:00Z"
+}

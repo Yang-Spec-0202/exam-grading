@@ -1,0 +1,16 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: "[UngradableReason::NotAnswered, UngradableReason::RecognitionUnavailable,\nUngradableReason::AnswerKeyIncomplete, UngradableReason::OutOfScope,\nUngradableReason::BackendUnavailable, UngradableReason::Timeout,\nUngradableReason::BudgetExceeded, UngradableReason::InvalidSchema,\nUngradableReason::Conflict, UngradableReason::PolicyBlocked]"
+---
+[
+  "not_answered",
+  "recognition_unavailable",
+  "answer_key_incomplete",
+  "out_of_scope",
+  "backend_unavailable",
+  "timeout",
+  "budget_exceeded",
+  "invalid_schema",
+  "conflict",
+  "policy_blocked"
+]

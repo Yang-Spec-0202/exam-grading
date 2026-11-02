@@ -1,0 +1,9 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: "RuleText\n{\n    question_id: QuestionId::from_ulid(u(21)), text:\n    \"每步 1 分\".to_owned(), source: RuleTextSource::Handwritten,\n}"
+---
+{
+  "question_id": "0000000000000000000000000N",
+  "text": "每步 1 分",
+  "source": "handwritten"
+}

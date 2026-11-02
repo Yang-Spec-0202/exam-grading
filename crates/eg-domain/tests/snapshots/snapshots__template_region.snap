@@ -1,0 +1,14 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: "TemplateRegion\n{\n    page_no: 2, question_id: QuestionId::from_ulid(u(22)), bbox:\n    BBox::new(0.0, 0.5, 1.0, 0.5).unwrap(),\n}"
+---
+{
+  "page_no": 2,
+  "question_id": "0000000000000000000000000P",
+  "bbox": {
+    "x": 0.0,
+    "y": 0.5,
+    "w": 1.0,
+    "h": 0.5
+  }
+}

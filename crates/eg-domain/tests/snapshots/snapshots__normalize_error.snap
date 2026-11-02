@@ -1,0 +1,17 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: "[NormalizeError::Unparsable\n{ input: \"x^\".to_owned(), reason: \"括号不配对\".to_owned() },\nNormalizeError::Unsupported { reason: \"微积分超出范围\".to_owned() }]"
+---
+[
+  {
+    "unparsable": {
+      "input": "x^",
+      "reason": "括号不配对"
+    }
+  },
+  {
+    "unsupported": {
+      "reason": "微积分超出范围"
+    }
+  }
+]

@@ -1,0 +1,23 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: partial_choice_rule()
+---
+{
+  "correct_option_count": 3,
+  "tiers": [
+    {
+      "selected_correct": 1,
+      "points": 2000,
+      "label": "选对 1 个"
+    },
+    {
+      "selected_correct": 2,
+      "points": 4000,
+      "label": null
+    }
+  ],
+  "wrong_selection_zero": true,
+  "source": "official",
+  "source_note": "2026 年全国卷评分细则",
+  "total_milli": 6000
+}

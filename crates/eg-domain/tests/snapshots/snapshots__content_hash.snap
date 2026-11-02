@@ -1,0 +1,5 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: "ContentHash::of(b\"asset\")"
+---
+"43913d55ea628b6dbd30f56ee3f547039458e4e17543bd951b58a9ac77de5eeb"

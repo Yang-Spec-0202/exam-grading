@@ -1,0 +1,12 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: "RubricDraftItem\n{\n    criterion: \"写出公式\".to_owned(), points: milli(1000), required: true,\n    depends_on: vec![1],\n}"
+---
+{
+  "criterion": "写出公式",
+  "points": 1000,
+  "required": true,
+  "depends_on": [
+    1
+  ]
+}

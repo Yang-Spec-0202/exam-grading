@@ -1,0 +1,5 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: "SegmentId::from_ulid(u(7))"
+---
+"00000000000000000000000007"

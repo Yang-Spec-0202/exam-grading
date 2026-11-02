@@ -1,0 +1,13 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: "ChainOutcome\n{\n    verdict: ComparatorVerdict::Equal, attempts:\n    vec![(ComparatorId::new(\"num_abs\").unwrap(), ComparatorVerdict::Equal)],\n}"
+---
+{
+  "verdict": "equal",
+  "attempts": [
+    [
+      "num_abs",
+      "equal"
+    ]
+  ]
+}

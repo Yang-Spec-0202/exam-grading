@@ -1,0 +1,5 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: "dec(\"-12.340\")"
+---
+"-12.34"

@@ -1,0 +1,5 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: "RubricItemId::from_ulid(u(12))"
+---
+"0000000000000000000000000C"

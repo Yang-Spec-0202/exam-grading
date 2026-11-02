@@ -1,0 +1,5 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: "SubmissionId::from_ulid(u(5))"
+---
+"00000000000000000000000005"

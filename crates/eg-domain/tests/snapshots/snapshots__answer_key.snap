@@ -1,0 +1,35 @@
+---
+source: crates/eg-domain/tests/snapshots.rs
+expression: "[AnswerKey::Concrete(concrete_key()), AnswerKey::RubricOnly,\nAnswerKey::ExplicitlyOmitted { note: Some(\"见教材\".to_owned()) },\nAnswerKey::Missing]"
+---
+[
+  {
+    "concrete": {
+      "primary": {
+        "number": {
+          "value": "2.5",
+          "unit": "cm",
+          "tolerance": {
+            "absolute": "0.01",
+            "relative_ppm": 1000
+          }
+        }
+      },
+      "alternatives": [
+        {
+          "expression": "\\frac{5}{2}"
+        }
+      ],
+      "comparators": [
+        "num_abs"
+      ]
+    }
+  },
+  "rubric_only",
+  {
+    "explicitly_omitted": {
+      "note": "见教材"
+    }
+  },
+  "missing"
+]
