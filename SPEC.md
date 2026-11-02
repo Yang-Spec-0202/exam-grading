@@ -1,6 +1,7 @@
 # SPEC：自动作业批改系统（exam-grading）
 
-> 状态：草案 v0.2.3 · 2026-11-02 · **待审批**（只定义「是什么/怎么验收」，不含实现，**不含任何示例代码**）
+> 状态：草案 v0.2.4 · 2026-11-03 · **待审批**（只定义「是什么/怎么验收」，不含实现，**不含任何示例代码**）
+> v0.2.4 摘要（实现期偏差回写）：§4 日志措辞允许 `tracing` 订阅层或等价自研 JSONL writer（输出契约不变）；新增 S14 多选题部分给分成功标准（按档位给分、错选归零、缺档转人工不默认 0）；§10 许可白名单维持 10 项，无新增。逐模块偏差回写见 `SPEC-recognize.md`/`SPEC-inference.md`/`SPEC-capture.md`/`SPEC-platform.md`/`SPEC-grade.md`/`SPEC-domain.md` 的 v0.2.4 条目与 `docs/dev/research/` 下各模块研究记录 §7。
 > v0.2.3 摘要（按 tech-spike 实测修订）：OCR 官方 GGUF 为 BF16、Q4 仅第三方且默认不启用；OCR 有效分辨率受 mmproj 下采样约 1MP 限制（密集小字靠版面分块而非提高 DPI）；推理 serving 默认仅 llama.cpp；§4 选型补实测版本（hayro 0.8.0 / sympy 1.14 + Python 3.12 / rust_xlsxwriter 0.102 / Slint 1.18.1）。依据：`docs/dev/research/` 下的 `models.md`、`inference-serving.md`、`pdf.md`、`cas.md`、`deps.md`、`slint.md`。
 > 关联：`CAPABILITY-MAP.md`（模块索引）· `SPEC-<module-id>.md`（12 份模块规范）
 > 本轮变更见 §11；与 v0.1 的差异全部来自用户 2026-11-01 的 8 条答复与 2 条额外要求。
@@ -39,6 +40,8 @@
 
 **v1 明确不做**：学生端、多教师账号与权限、局域网/服务端同步、在线考试、自动出题、非数学学科的判分实现（`domain` 与 `subject-*` 必须留位）、成绩单 PDF、应用签名分发。
 
+**v1 已知输入限制（v0.2.4 回写）**：DOCX（学生作业与参考答案文本）与 HEIC/HEIF 在 v1 **显式不支持**——识别为不支持的格式并返回明确错误码（不静默、不降级为成功），列入已知限制；§1 第 3/4 条中的 DOCX 部分推迟到后续里程碑，重新启用需新增解码/解包依赖并走 Ask first。依据 `SPEC-capture.md` §3.2/§4/§8、`docs/dev/research/capture.md` §7。
+
 ## 3. 目标与成功标准（可验收）
 
 **目标**：教师录入参考答案（与可选的评分规则）→ 批量导入一个班的学生作业（文件名即学生）→ 本地识别/对齐/两层判分 → 只复核低置信与主观题 → 导出成绩与统计。
@@ -58,6 +61,7 @@
 | S11 | 模式区分 | 标准/快速两种模式的分数、阈值、导出标注在报告与审计中可分辨；快速模式结果 100% 带 `mode=fast` 标记 |
 | S12 | 评分规则结构化 | 10 条教师手写规则经模型整理后，教师确认率 100%（无一条未经确认生效）；结构化后通过静默校验 |
 | S13 | 日志与文档 | 每次判分可按 trace id 追出完整链路；docs 目录齐全、链接检查 0 死链、每个模块有 ADR 与用户手册章节 |
+| S14 | 多选部分给分 | 按 `Rubric.partial_choice` 档位给分与教师口径逐项一致（含 2/3 正确选项两种口径）；任一错选该题 0 分；缺档、跳档、与 `ScoringMode` 不一致、档位越界 100% 转人工且不得默认 0 分（依据 `SPEC-domain.md` §4 不变量 5–11、`SPEC-grade.md` §5.3、`docs/dev/research/domain.md` §7） |
 
 ## 4. 技术栈（不含代码示例）
 
@@ -73,7 +77,7 @@
 | 表格导出 | rust_xlsxwriter 0.102 + CSV + 单文件 HTML | 实测中文表名/加粗表头/列宽可用；依据 `docs/dev/research/deps.md` |
 | OCR/文档解析 | 默认 PaddleOCR-VL-1.6（0.9B；**官方 GGUF 为 BF16、约 1.8GB 双文件**；Q4_K_M 仅第三方、**默认不启用**、作为可选 profile 须精度验收后再切换），注册表内可换；公式输出 LaTeX | 本地 sidecar，默认离线；OCR 输入被 mmproj 下采样到约 1MP（`image_max_pixels=1003520`），密集小字页需**版面分块**，抬高 PDF DPI 无效；依据 `docs/dev/research/models.md`、`inference-serving.md` |
 | 符号计算 | CAS 适配层：sympy 1.14 sidecar + Python 3.12（由 uv 托管，不要求用户手装；BSD-3） | 用于三角恒等/矩阵/集合等价；不可用/超时（3s）则降级为无法判定；依据 `docs/dev/research/cas.md` |
-| 错误/日志 | 类型化错误 + `tracing` 结构化日志（JSONL） | 库不 panic |
+| 错误/日志 | 类型化错误 + 结构化日志（JSONL）：实现允许 `tracing` 订阅层，或输出契约等价的**自研 JSONL writer**（字段、级别解析、脱敏、轮转、保留、索引均须满足 `SPEC-platform.md` §6；实现取舍依据 `docs/dev/research/platform.md` §4-Q8/§7） | 库不 panic；日志实现方式不改变任何验收行为 |
 | 测试 | 单元 + 性质 + 快照 + 夹具回放 + 端到端 | 不依赖真实模型 |
 | 推理 serving | **llama.cpp 0.8.0**（brew build 11960，MIT，Metal 可用）；MLX（mlx-vlm）实测可跑但整页更慢，仅作显式可选后端、不默认 | v1 默认且仅默认 llama.cpp；Qwen3 系必须关闭 thinking 模式（否则输出为空）；依据 `docs/dev/research/inference-serving.md` |
 | 质量 | fmt / clippy 严格模式 / cargo-deny（10 项许可白名单） | 见 §10.1；依据 `docs/dev/research/deps.md` |
@@ -183,7 +187,7 @@
 
 **Never**：把学生数据发往未授权后端；把 API Key 写入库/日志/仓库；缺答案时让模型自造答案并据此判分；无证据出分；低置信绕过门禁进最终成绩；静默吞掉失败；**在规范文件里写示例代码**（代码块、JSON、Rust/Slint 片段）；删除失败测试。
 
-### 10.1 依赖许可白名单（v0.2.3 扩展为 10 项）
+### 10.1 依赖许可白名单（v0.2.4 维持 10 项，无新增）
 
 | 许可证 | 用途与来源 | 依据 |
 |---|---|---|
@@ -270,7 +274,7 @@
 ## 14. 审批清单
 
 - [ ] §1 的 12 条需求与 §2 假设 A1–A8
-- [ ] §3 成功标准 S1–S13（尤其 S3/S6/S11/S12）
+- [ ] §3 成功标准 S1–S14（尤其 S3/S6/S11/S12/S14）
 - [ ] §4 技术栈与 §11 变更表
 - [ ] §9 文档系统与 §10 边界（含「规范禁止示例代码」）
 - [ ] §13 的 5 个开放问题

@@ -1,8 +1,9 @@
 # SPEC-domain：领域模型与学科插件契约
 
 > 模块 id：`domain` · 依赖：无（纯类型 + 纯函数，零 IO、零数据库、零网络）
-> 上游：`CAPABILITY-MAP.md` · 全局约定见 `SPEC.md`（v0.2，**规范不含示例代码**）
-> 状态：草案 v0.2.2 · 2026-11-02 · **待审批**（v0.2.2 新增「按选项部分给分」与全国卷 active/retired 语义）
+> 上游：`CAPABILITY-MAP.md` · 全局约定见 `SPEC.md`（v0.2.4，**规范不含示例代码**）
+> 状态：草案 v0.2.4 · 2026-11-03 · **待审批**（v0.2.2 新增「按选项部分给分」与全国卷 active/retired 语义；v0.2.4 补齐实现期支撑类型裁定，见 §15.4）
+> v0.2.4 摘要（实现期裁定回写，依据 `docs/dev/research/domain.md` §7）：①§15.4 登记规范未给表示、实现已落地的支撑类型（`Timestamp`/`Decimal`/`SubjectId`/`ComparatorId`/`BackendId`/`TemplateId`/`CalibrationId`/`Rotation`/`ExifOrientation`/`ComparatorTraceId`/`JudgedUnit`/`RubricItemRef`）；②`SchemaVersioned` 用关联常量 + 存储层外层封装，§3–§8 字段表逐字不变；③`RubricDraft.id` 用 `RubricId`；`RubricDraftItem.depends_on` 从 1 起；`AnswerPart.segment_id`/`recognition_id` 非空；`Judgement::Partial` 的 `satisfied`/`missing` 用 `JudgedUnit`。
 > 说明：本文件用「类型 + 字段表 + 不变量」描述契约，不提供任何语言层示例。字段名为最终命名，实现时逐字使用。
 
 ## 1. 目标与边界
@@ -26,6 +27,8 @@
 | `Clock` | 可注入时钟接口 | 业务代码不得直接读系统时间；测试注入固定时钟 |
 
 辅助规则：`MilliScore` 提供「从分数字符串解析」「格式化回分数字符串」「受检加法」；解析失败返回类型化错误，不 panic、不 clamp。
+
+支撑类型：`Timestamp`、`Decimal`、`SubjectId`、`ComparatorId`、`BackendId`、`TemplateId`、`CalibrationId`、`Rotation`、`ExifOrientation`、`ComparatorTraceId` 等是字段表所需、但 §2 未给出表示的支撑类型；v0.2.4 起其落地解释统一登记在 §15.4（字段表逐字不变，类型由支撑类型承载）。
 
 ## 3. 试卷与题目
 
@@ -112,9 +115,9 @@
 
 **RuleText（规则原文）**：字段 `question_id`、`text`（教师自然语言规则，可为空 = 使用模板）、`source`（`RuleTextSource`：手写/模板/导入）。
 
-**RubricDraft（规则草稿）**：字段 `id`、`question_id`、`status`（`DraftStatus`：草稿/待确认/已确认/已拒绝）、`items`（`RubricDraftItem` 列表）、`raw_text`（原始规则文本）、`origin`（`DraftOrigin`：手写直译/模型整理/模板套用）、`model_call_id`（模型整理时必填，便于复现）、`validation`（`RubricIssue` 列表）、`created_at`、`confirmed_at`。
+**RubricDraft（规则草稿）**：字段 `id`、`question_id`、`status`（`DraftStatus`：草稿/待确认/已确认/已拒绝）、`items`（`RubricDraftItem` 列表）、`raw_text`（原始规则文本）、`origin`（`DraftOrigin`：手写直译/模型整理/模板套用）、`model_call_id`（模型整理时必填，便于复现）、`validation`（`RubricIssue` 列表）、`created_at`、`confirmed_at`。**`id` 类型裁定（v0.2.4）**：使用 `RubricId`（草稿转生效规则沿用同一 id；不另造 `DraftId`）。
 
-**RubricDraftItem**：字段 `criterion`、`points`、`required`、`depends_on`（引用草稿内序号）。
+**RubricDraftItem**：字段 `criterion`、`points`、`required`、`depends_on`（引用草稿内序号）。**基址裁定（v0.2.4）**：`depends_on` 从 **1** 起（与 `Question.ordinal`、`StepMatch` 序号风格一致），越界/自依赖/成环均为类型化错误。
 
 **DraftOrigin** 取值：手写直译、模型整理、模板套用。
 
@@ -156,7 +159,7 @@
 
 **ManualReason（转人工原因）** 取值：答案键缺失、答案键省略、规则缺失、识别不可用、置信度不足、超出范围、冲突未解决、后端不可用。
 
-**Judgement（L2 判定结果）** 取值：一致（得分 + 理由 + 证据）、部分一致（得分 + 满足项 + 缺失项 + 理由）、不一致（得分 + 理由 + 证据）、不可判定（原因 `UngradableReason`）。按选项部分给分时：无错选且未全对 → 「部分一致」，`satisfied` 为命中的正确选项、`missing` 为未选中的正确选项，`awarded` 取档位分值；存在错选 → 「不一致」且 `awarded` 为 0（不得用「部分一致」表达错选）。
+**Judgement（L2 判定结果）** 取值：一致（得分 + 理由 + 证据）、部分一致（得分 + 满足项 + 缺失项 + 理由）、不一致（得分 + 理由 + 证据）、不可判定（原因 `UngradableReason`）。按选项部分给分时：无错选且未全对 → 「部分一致」，`satisfied` 为命中的正确选项、`missing` 为未选中的正确选项，`awarded` 取档位分值；存在错选 → 「不一致」且 `awarded` 为 0（不得用「部分一致」表达错选）。**元素类型裁定（v0.2.4）**：`satisfied`/`missing` 统一为 `Vec<JudgedUnit>`；`JudgedUnit` 为带标签枚举，取值为「评分项（`RubricItemId`）」或「选项（选项标签）」，同一字段在两种判分形态下均不丢信息（依据 §15.4、`docs/dev/research/domain.md` §7）。
 
 **UngradableReason（不可判定原因）** 取值：未作答、识别不可用、答案键不完整、超出范围、后端不可用、超时、预算超限、Schema 不合法、冲突、策略拦截。
 
@@ -205,7 +208,7 @@
 
 **StudentAnswer（对齐后的学生答案）**：字段 `submission_id`、`question_id`、`recognition_id`（主段，可空）、`segment_id`（主段，可空）、`raw`（已合并）、`parts`（每页一段 `AnswerPart`）、`recognition_confidence`（各段最小值）。
 
-**AnswerPart（页面证据片段）**：字段 `page_id`、`segment_id`、`recognition_id`、`bbox`、`text`。
+**AnswerPart（页面证据片段）**：字段 `page_id`、`segment_id`、`recognition_id`、`bbox`、`text`。**可空性裁定（v0.2.4）**：`segment_id` 与 `recognition_id` 均**非空**（证据片段必须指向真实区域与真实识别记录）；人工修正导致「主识别 id 为空」只落在 `StudentAnswer.recognition_id`，不在 `AnswerPart` 中留空。
 
 **NormalizedAnswer（归一化答案）**：字段 `text`、`latex`（可空）、`value`（可空，结构化值）、`steps`（步骤列表）。
 
@@ -234,7 +237,7 @@
 - 所有持久化类型可序列化为 JSON，字段名 `snake_case`；仅**模型输出结构**使用严格模式（拒绝未知字段），历史记录使用宽容模式（忽略未知字段、未知枚举保留原值并告警）。
 - 枚举使用带标签形式，便于审计阅读与模型输出校验。
 - 存储：id 与枚举标签存 TEXT；分数存 INTEGER（千分之一分原始值）；时间存 RFC3339 文本；置信度存 REAL。
-- 每类持久化对象带 `schema_version`；升级只新增字段并给默认值，禁止重命名后改历史数据。
+- 每类持久化对象带 `schema_version`；升级只新增字段并给默认值，禁止重命名后改历史数据。**落地方式裁定（v0.2.4）**：以 `SchemaVersioned` 的**关联常量**声明当前版本，由存储层在 JSON 外层封装 `schema_version`（不在 §3–§8 的字段表内新增字段）；读取时按外层版本选择宽容/严格反序列化，版本高于当前支持范围即显式报错，不静默丢弃未知字段。
 - 版本号进证据：答案键版本、规则版本、识别引擎版本、模型版本、提示词哈希、配置哈希，缺一不可复现。
 
 ## 11. 失败语义（构造与校验）
@@ -310,6 +313,25 @@
 - 参考答案页不建模为 `Page`：由 `capture` 的 `KeyPageAsset`（模块自有）承载，一次性识别后由教师确认写入答案键。
 - 脚本/条码解码、拼音匹配、CAS 实现细节：v1 不引入或按模块开放问题处理。
 - §16 的开放问题保持开放，Plan 阶段按实测决定。
+
+### 15.4 v0.2.4 支撑类型与落地解释（§2–§10 字段表不变）
+
+| 规范位置 | 落地解释 |
+|---|---|
+| §2 字段所需的 `Timestamp` | 以 chrono 的 UTC 时间别名承载；对外只经 `format_rfc3339`/`parse_rfc3339` 的 `Z` 形式序列化 |
+| §4 `AnswerValue::Number`、`Tolerance.absolute` 所需 `Decimal` | 精确十进制（不引入浮点误差）；解析失败类型化报错，不 clamp |
+| §3 `subject`、§4 `comparators`、模板 `template_id`、§8 `calibration_id`、§6 `exif_orientation`/`rotation_applied` | 分别为 `SubjectId`、`ComparatorId`、`TemplateId`、`CalibrationId`、`ExifOrientation`、`Rotation` 值对象；`SubjectId` v1 恒为 math |
+| §2 未列但 §8 需要的 `BackendId` | 非空字符串新类型，保留字 `local_server`/`openai_compat`/`fixture`（与 `SPEC-inference.md` §2.2 一致） |
+| §8 `ComparatorTrace.id` | 新增 `ComparatorTraceId`（ULID 新类型，补入 §2 id 族语义）；`EvidenceRef` 据此引用比较轨迹 |
+| §8 `Judgement::Partial.satisfied`/`missing` | `Vec<JudgedUnit>`；`JudgedUnit` 为「评分项（`RubricItemId`）」或「选项（标签）」的带标签枚举，兼容逐项判定与多选部分给分两种形态 |
+| §9 `RubricIssue.item` | `Option<RubricItemRef>`；`RubricItemRef` 为「评分项 id」或「草稿内序号（1 起）」的带标签枚举，两种上下文都保留 |
+| §10 `schema_version` | `SchemaVersioned` 关联常量 + 存储层外层封装；§3–§8 字段表逐字不变 |
+| §5 `RubricDraft.id` | 用 `RubricId`（草稿转生效规则沿用同一 id） |
+| §5 `RubricDraftItem.depends_on` | 从 **1** 起，越界/自依赖/成环为类型化错误 |
+| §9 `AnswerPart.segment_id`/`recognition_id` | 均**非空**；人工修正的「主识别 id 为空」落在 `StudentAnswer.recognition_id` |
+| §4 `RubricOrigin` | 带数据的枚举：手写（确认人 + 确认时间）、模板（模板 id + 版本）、模型整理（模型调用 id + 确认信息） |
+
+说明：以上均为「规范未给表示」处的实现解释，不改变任何字段名、字段顺序或语义；§14 的序列化快照仍以字段表为准。
 
 ## 16. 开放问题
 

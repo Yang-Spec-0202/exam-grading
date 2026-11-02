@@ -2,6 +2,85 @@
 
 > 记录规范与行为的变更（按版本倒序）。文档结构变更也在此登记。
 
+## [0.2.4] - 2026-11-03（实现期偏差回写）
+
+### 变更（规范补丁，零实现改动）
+
+- `SPEC-recognize.md` v0.2.4：OCR 量化口径与 `CONFIG.md`/`SPEC-inference.md` 对齐（官方 GGUF BF16 默认、Q4_K_M 仅第三方默认不启用）；结构校验归属不变，但**实现期**严格解析暂由本模块承载（`eg-inference` OCR 契约定稿后迁回）；公式 LaTeX 非法或 `ocr.emit_latex` 关闭时，块降级为「未知」块（`latex` 空、置信度 0），与 `SPEC-domain.md` §7「公式块必带 LaTeX」不变量统一；手写阈值与输入长边上限登记为配置键。依据 `docs/dev/research/recognize.md` §7。
+- `SPEC-inference.md` v0.2.4：云端策略拦截（总开关关/无授权/范围不符/预算超限）写审计 `inference.policy_blocked`，不伪造 `ModelCall`；预算用尽 → `ConsentState::Exhausted` 持久态，重启后仍失效；v1 内置传输无 TLS、`https://` 显式不支持（启用云端前单独评估 TLS 依赖）；注册表默认编译期内嵌、数据目录 `inference.registry_path` 可选覆盖，加载顺序与失败语义明确；模型输出 `ungradable` 由调用方构造。依据 `docs/dev/research/inference.md` §8。
+- `SPEC-capture.md` v0.2.4：HEIC/HEIF 与 DOCX 参考答案文本抽取在 v1 **显式不支持**（返回明确错误码，不静默、不降级），列入已知限制并调整 C1 验收；落库定为「资产先行、业务单事务」（`platform` 的 db/repo/audit 同一写事务）。依据 `docs/dev/research/capture.md` §7。
+- `SPEC-platform.md` v0.2.4：日志实现允许 `tracing` 订阅层或输出契约等价的**自研 JSONL writer**（字段/级别/脱敏/轮转/索引不变）；任务授权撤销 = 状态更新 + 审计留痕（不追加新记录），新增 `Exhausted` 持久态；登记迁移 v2（`rubric_draft` 载荷与按题目查询、`paper` 级版本 CAS 辅助、审计扩展、`task_consent.state` 增加 `exhausted`）；备份恢复必须先清理目标库 `-wal`/`-shm`（CP-B 缺陷 D1 经验规则）。依据 `docs/dev/research/platform.md` §4/§7/§10.4、`docs/dev/research/rubric.md` §7-R3、`docs/dev/research/inference.md` §8-D2。
+- `SPEC-grade.md` v0.2.4：R1「学科归一化失败」适用面收窄为「有具体答案键、需确定性比较」的题；「仅评分标准/仅人工」使用原始文本；判定理由长度上限登记为配置项。依据 `docs/dev/research/grade.md` §7。
+- `SPEC-domain.md` v0.2.4：§15.4 登记支撑类型与落地解释（`Timestamp`/`Decimal`/`SubjectId`/`ComparatorId`/`BackendId`/`TemplateId`/`CalibrationId`/`Rotation`/`ExifOrientation`/`ComparatorTraceId`/`JudgedUnit`/`RubricItemRef`）；`SchemaVersioned` 用关联常量 + 存储层外层封装（字段表不变）；`RubricDraft.id` 用 `RubricId`；`RubricDraftItem.depends_on` 从 1 起；`AnswerPart.segment_id`/`recognition_id` 非空；`Judgement::Partial` 的 `satisfied`/`missing` 用 `JudgedUnit`。依据 `docs/dev/research/domain.md` §7。
+- `SPEC.md` v0.2.4：§4 日志措辞与 `platform` 实现一致；新增 S14 多选题部分给分成功标准（按档位给分、错选归零、缺档转人工不默认 0）；§10 许可白名单维持 10 项。
+- `CONFIG.md` v0.2.4：新增 `ocr.input_max_edge`（默认 2000 px）、`recognize.handwriting.page_threshold`（0.55）/`block_threshold`（0.50）、`grade.reason_max_chars`（500）；`inference.registry_path` 说明改为「内嵌默认 + 数据目录覆盖」。
+- 记录补登：`docs/changelog.md` 补 v0.2.2 条目（此前只有 0.2.1/0.2.3 条目，0.2.2 的变更散落在规范摘要中）。
+
+### 说明
+
+- 本版本为**规范补丁**：只改 `SPEC*.md`、`CONFIG.md`、本文件，不改实现代码与研究记录；零代码围栏。
+- 偏差依据与逐条裁定见 `docs/dev/research/` 下 `recognize.md`、`inference.md`、`capture.md`、`platform.md`、`grade.md`、`domain.md` 的「与规范的偏差」节。
+
+## [0.2.3] - 2026-11-02（规范修订 + 文档初稿）
+
+### 变更（按 tech-spike 实测修订）
+
+- `SPEC.md` v0.2.3：OCR 官方 GGUF 为 BF16（Q4 仅第三方、默认不启用）；OCR 有效分辨率受 mmproj 下采样限制（约 1MP，密集小字靠版面分块而非提高 DPI）；推理 serving 默认仅 llama.cpp；技术栈补实测版本：hayro 0.8.0、sympy 1.14 + Python 3.12、rust_xlsxwriter 0.102、Slint 1.18.1。
+- 抽检语义确定：抽检比例默认 0.20（可调），低置信度权重 0.70；抽样随机种子记录并写入审计，保证可复现；抽检不通过弹窗询问重跑（默认单题、可选整卷）。
+- 许可：依赖白名单扩展为 10 项，项目整体 GPL-3.0-only，Slint 走 GPL-3.0-only 分支（不启用 Royalty-free 归属、不购商业许可）；`deny.toml` 改为 fail-closed。
+- `CONFIG.md`：新增 `identity.ocr_threshold`/`identity.ocr_margin`、`fast.sampling_seed`、`log.index_range_days`/`log.index_rebuild` 等键；`fast.sampling_rate` 由 0.70 调整为 0.20（权重仍 0.70）。
+- 模块规范同步修订：`SPEC-align`（身份只看文件名、OCR 兜底默认关、阈值引用 `CONFIG.md`）、`SPEC-report`（快速统计单列、抽检率与方法写入报表说明、`fast.export_label`）、`SPEC-review`（抽检只读、抽检不通过弹窗重跑）、`SPEC-app`（十页导航、中文 IME 人工验收清单）、`SPEC-capture`/`SPEC-inference`/`SPEC-rubric`/`SPEC-platform` 等。
+
+### 新增（文档）
+
+- 用户手册 8 篇：`docs/user/quick-start.md`、`import-and-naming.md`、`modes.md`、`review.md`、`rubric.md`、`export.md`、`troubleshooting.md`、`privacy.md`（M10 初稿，未实现步骤标注「计划中」）。
+- ADR 0002–0009：两层判分、双模式与加权抽检、规则草稿确认、文件名身份、任务级云端授权、CAS 扩展与降级、规范无示例代码、GPL/Slint 许可。
+- `docs/book/SUMMARY.md` 增加「用户手册」与完整 ADR 导航；mdBook 静态站重新生成。
+
+### 说明
+
+- 本版本仍不含可运行的桌面应用：`platform`、`subject-math` 等模块在实现中，Slint 外壳为 M9 计划；用户手册描述目标行为，未实现步骤已标注「计划中」。
+
+## [0.2.2] - 2026-11-02（多选部分给分与全国卷卷型状态）
+
+### 变更
+
+- `SPEC-domain.md` v0.2.2：`ScoringMode` 新增「按选项部分给分」；新增 `Rubric.partial_choice` 与 `PartialChoiceRule`/`PartialChoiceTier`/`PartialChoiceSource`；新增不变量 5–11（与题型/评分项自洽、模式互斥、档位完整性、档位数值约束、不超满分、错选归零、来源可追溯）；`grade` 只读档位数据、不推算也不默认 0 分。
+- `SPEC-rubric.md`/模板数据：全国卷模板包区分 active/retired——现行仅新课标Ⅰ/Ⅱ（2024 年起 19 题/150 分），全国甲卷（2026 年起退出）、全国乙卷（2024 年起停止命制）标 `retired` 只读快照；多选档位按官方口径写入模板数据（2 选项选对 1 个得一半分；3 选项选对 1 个得三分之一、选对 2 个得三分之二；错选 0 分）。
+- `CONFIG.md`：新增 `rubric.partial_choice_enabled`（默认开，关闭时含档位的规则在校验期错误级拦下）、`rubric.national_sets`（现行/历史分组）。
+
+### 说明
+
+- 本版本为规范与模板数据修订，实现见 `eg-domain`/`eg-rubric`/`eg-grade` 的 T13/T15/T18 任务；判分侧验收标准见 `SPEC.md` S14（v0.2.4 补登）。
+
+## [0.2.1] - 2026-11-02（文件名身份与配置总表）
+
+### 新增
+
+- `CONFIG.md`（配置项总表与默认值）与 `AGENTS.md`（检索优先的实现纪律）进入仓库基线；`dev.research_first` 恒开。
+- 身份改为「只看文件名」：`identity.ocr_fallback` 默认关，文件名未命中即未决人工；条码路径默认关；仅在选文件时提示规范命名。
+- 用户答复：无用户/登录（审计 actor 固定 `local-teacher`）；标准/快速双模式；云端按任务鉴权；原图永久保留；不做分发打包；数学覆盖根式/三角/向量/矩阵/区间/集合。
+- 规范禁止示例代码（含代码块、JSON、Rust/Slint 片段）；`scripts/docs-check.sh` 增加规范围栏扫描。
+
+### 说明
+
+- 本版本为中间修订，后续修订见 0.2.3。
+
+## [0.2.0] - 2026-11-01（第二版规范）
+
+### 新增
+
+- 新增 `rubric` 模块（评分规则：手写/模板/模型整理 → 草稿 → 教师确认 → 生效），模块规范从 11 份增至 12 份。
+- 标准/快速双模式（阈值差异、按比例抽检、模式写入每条判分记录）；新增 `GradeMode`、`sampled`、`SubmissionExclusion`、`PaperTemplate`、`Submission.source_file_name`/`source_stem` 等类型与字段。
+- 任务级云端授权（`TaskConsent`：范围、预算、任务生命周期）；`ModelCall` 记录 `task_id`/`consent_id`。
+- 完整日志与文档系统要求；`docs/` 目录、mdBook 静态站、文档门禁。
+- 不支持项明确：成绩单 PDF、应用签名与分发打包、学生端、账号与权限、非数学学科判分实现。
+
+### 变更
+
+- 身份从「条码 → 学号 → 姓名」改为「文件名优先」（后续 0.2.1 进一步改为只看文件名）。
+- 原图保留策略由「可配置保留期」改为「永久保留、不自动清理」。
+
 ## [0.1.0] - 2026-11-02（M0 工程骨架）
 
 ### 新增

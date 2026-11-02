@@ -1,6 +1,6 @@
 # CONFIG：配置项清单与默认值
 
-> 状态：草案 v0.2.3 · 2026-11-02 · **待审批**（v0.2.2：全国卷 active/retired 标注、多选部分给分开关；v0.2.3：OCR 默认模型量化说明按实测修订）
+> 状态：草案 v0.2.4 · 2026-11-03 · **待审批**（v0.2.2：全国卷 active/retired 标注、多选部分给分开关；v0.2.3：OCR 默认模型量化说明按实测修订；v0.2.4：新增 `ocr.input_max_edge`、`recognize.handwriting.*`、`grade.reason_max_chars`，并说明注册表内嵌默认 + 数据目录覆盖）
 > 用途：所有「可按需调整」的行为集中登记在这里；实现阶段按本表建立设置项，默认值以本表为准。
 > 规则：**不变量不可配置**（证据、门禁、教师确认、审计、离线默认、模式可分辨）；其余尽量可配置；本表不含示例代码。
 > 归属模块列表示「谁读取该配置」，不代表存储位置（存储统一在 `platform`）。
@@ -60,6 +60,9 @@
 | `ocr.repair_attempts` | 1 | 0–2 | 结构不合法时调用方发起的机械修复次数 | recognize |
 | `ocr.confidence_floor` | 0.75 | 0.5–0.95 | 低于该值的答案进人工 | grade |
 | `ocr.cache` | 开 | 开 / 关 | 识别结果缓存 | recognize |
+| `ocr.input_max_edge` | 2000 px | 1000–4000 px | 送入识别模型的图像长边上限；超出时识别侧**显式报配置/输入错误**（不静默缩放），降采样与记录归 `capture` 适配器；依据 `docs/dev/research/recognize.md` §4.10/§7-D9 | capture/recognize |
+| `recognize.handwriting.page_threshold` | 0.55 | 0.30–0.90 | 手写降级页级阈值：识别级合成置信度低于该值且存在手写块即转人工；依据 `SPEC-recognize.md` §3.4、`docs/dev/research/recognize.md` §7-D8 | recognize |
+| `recognize.handwriting.block_threshold` | 0.50 | 0.20–0.90 | 手写降级块级阈值：手写块置信度低于该值即转人工；与页级阈值独立判定（块级优先） | recognize |
 
 ## 5. 判分
 
@@ -76,6 +79,7 @@
 | `grade.max_repair_attempts` | 1 | 0–2 | 判定输出不合法时的修复次数 | grade |
 | `grade.judge_timeout_s` | 20 | 5–60 | 单题判定超时 | inference |
 | `grade.model_profile` | 4B 指令模型 + 受限输出 | 注册表内任一判定配置 | L2 判定配置 | inference |
+| `grade.reason_max_chars` | 500 | 100–2000 | 判定理由长度上限（字符）；越限按非法输出处理（不截断后当合法），依据 `SPEC-grade.md` §5.2、`docs/dev/research/grade.md` §7 | grade |
 
 ## 6. 快速模式与抽检
 
@@ -138,7 +142,7 @@
 | `log.index_range_days` | 30 | 7–365 | 全文索引覆盖范围（与日志保留一致） | platform |
 | `log.index_rebuild` | 启动校验 + 手动 + schema 变更强制重建 | 启动校验 / 手动 / 定时 | 索引重建策略（见 `SPEC-platform.md` 日志节） | platform |
 | `inference.local_port` | 自动分配 | 自动 / 固定端口 | 本地 sidecar 端口策略 | inference |
-| `inference.registry_path` | 数据目录内 `models/registry.toml` | 绝对路径 | 模型注册表位置 | inference |
+| `inference.registry_path` | 数据目录内 `models/registry.toml`（可选覆盖） | 绝对路径 | 注册表**默认编译期内嵌**；该路径文件存在时以其覆盖内嵌默认，缺失则用内嵌默认；校验失败即启动失败（不静默回退）。依据 `SPEC-inference.md` §3.2、`docs/dev/research/inference.md` §8-D5 | inference |
 | `inference.openai_base_url` | 空 | URL | 云端 OpenAI 兼容端点；空则云端不可用 | inference |
 | `inference.model_user_selectable` | 开 | 开 / 关 | 注册表中标记为可选的模型才出现在设置页 | inference |
 | `ui.window_geometry` | 自动记忆 | 自动 / 固定 | 窗口位置与尺寸记忆 | app |
