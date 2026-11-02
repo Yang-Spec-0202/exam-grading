@@ -1,0 +1,272 @@
+# =============================================================================
+# exam-grading · 全国卷数学模板数据（结构快照）
+#
+# 本文件只描述「试卷结构 + 分值 + 通用评分项骨架」，不包含任何题目原文。
+# 格式与字段定义：assets/templates/README.md
+# 来源、置信度与不确定项：docs/dev/research/templates.md
+#
+# 维护规则：只追加不改写；任何内容变化必须升 version。
+# =============================================================================
+
+schema_version = 1
+
+template_id = "national-new-curriculum-2"
+set_id = "new-curriculum-2"
+display_name = "新课标Ⅱ卷"
+subject = "math"
+paper_style = "new-gaokao"            # new-gaokao | old-gaokao
+status = "active"                     # active | retired
+version = "2026.1"
+snapshot_year = 2026
+snapshot_label = "2026 年卷结构（2024 年起定型，2025–2026 延续）"
+total_score_milli = 150000            # 千分之一分：150 分
+question_count = 19
+structure_note = "8 单选（5 分）+ 3 多选（6 分）+ 3 填空（5 分）+ 5 解答（13/15/15/17/17 分），无选做题"
+structure_confidence = "high"         # 题量/题型/各题型总分：官方评析可核
+score_split_confidence = "medium"     # 解答题逐题分值：2024–2025 公开资料，2026 推定沿用
+
+[provenance]
+verified_at = "2026-11-02"
+confidence = "high"
+basis = "official-analysis"
+source_ids = ["S1", "S2", "S3", "S4", "S5", "S8", "S10"]
+disclaimer = "仅记录结构与分值；不含题目原文；评分项骨架为通用占位，不是官方评分细则，须教师逐项确认后方可用于判分。"
+
+# -----------------------------------------------------------------------------
+# 题目列表（ordinal 从 1 起连续；max_score_milli 为千分之一分）
+# -----------------------------------------------------------------------------
+
+[[questions]]
+ordinal = 1
+label = "1"
+kind = "单选"
+max_score_milli = 5000
+skeleton = "objective-single"
+
+[[questions]]
+ordinal = 2
+label = "2"
+kind = "单选"
+max_score_milli = 5000
+skeleton = "objective-single"
+
+[[questions]]
+ordinal = 3
+label = "3"
+kind = "单选"
+max_score_milli = 5000
+skeleton = "objective-single"
+
+[[questions]]
+ordinal = 4
+label = "4"
+kind = "单选"
+max_score_milli = 5000
+skeleton = "objective-single"
+
+[[questions]]
+ordinal = 5
+label = "5"
+kind = "单选"
+max_score_milli = 5000
+skeleton = "objective-single"
+
+[[questions]]
+ordinal = 6
+label = "6"
+kind = "单选"
+max_score_milli = 5000
+skeleton = "objective-single"
+
+[[questions]]
+ordinal = 7
+label = "7"
+kind = "单选"
+max_score_milli = 5000
+skeleton = "objective-single"
+
+[[questions]]
+ordinal = 8
+label = "8"
+kind = "单选"
+max_score_milli = 5000
+skeleton = "objective-single"
+
+[[questions]]
+ordinal = 9
+label = "9"
+kind = "多选"
+max_score_milli = 6000
+skeleton = "objective-multiple"
+
+[[questions]]
+ordinal = 10
+label = "10"
+kind = "多选"
+max_score_milli = 6000
+skeleton = "objective-multiple"
+
+[[questions]]
+ordinal = 11
+label = "11"
+kind = "多选"
+max_score_milli = 6000
+skeleton = "objective-multiple"
+
+[[questions]]
+ordinal = 12
+label = "12"
+kind = "填空"
+max_score_milli = 5000
+skeleton = "objective-blank"
+
+[[questions]]
+ordinal = 13
+label = "13"
+kind = "填空"
+max_score_milli = 5000
+skeleton = "objective-blank"
+
+[[questions]]
+ordinal = 14
+label = "14"
+kind = "填空"
+max_score_milli = 5000
+skeleton = "objective-blank"
+
+[[questions]]
+ordinal = 15
+label = "15"
+kind = "计算/解答"
+max_score_milli = 13000
+skeleton = "step-compute"
+kind_note = "解答题第 1 题；若当年该题为证明题，套用时把 kind 改为「证明」并改用 step-proof 骨架"
+
+[[questions]]
+ordinal = 16
+label = "16"
+kind = "计算/解答"
+max_score_milli = 15000
+skeleton = "step-compute"
+kind_note = "若当年该题为证明题，套用时把 kind 改为「证明」并改用 step-proof 骨架"
+
+[[questions]]
+ordinal = 17
+label = "17"
+kind = "计算/解答"
+max_score_milli = 15000
+skeleton = "step-compute"
+kind_note = "若当年该题为证明题，套用时把 kind 改为「证明」并改用 step-proof 骨架"
+
+[[questions]]
+ordinal = 18
+label = "18"
+kind = "计算/解答"
+max_score_milli = 17000
+skeleton = "step-compute"
+kind_note = "若当年该题为证明题，套用时把 kind 改为「证明」并改用 step-proof 骨架"
+
+[[questions]]
+ordinal = 19
+label = "19"
+kind = "计算/解答"
+max_score_milli = 17000
+skeleton = "step-compute"
+kind_note = "压轴题，通常为递进式多问；若含证明设问，套用时改用 step-proof 骨架或混用"
+
+# -----------------------------------------------------------------------------
+# 评分项骨架库（被 questions.skeleton 引用）
+#
+# 所有条目均为通用占位：placeholder = true，criterion 以「【模板骨架】」开头。
+# 静态校验会以「判据仍为模板占位」错误级拦截，直到教师替换为本题具体判据。
+# 分值用 ratio_permille（千分比）表达，套用时按 题目满分 × 比例 折算；
+# 比例均为 100‰ 的整数倍，保证在以 0.1 分为粒度时可精确折算。
+# -----------------------------------------------------------------------------
+
+[skeletons.objective-single]
+scoring_mode = "全对才给分"
+label = "客观题·单选"
+scoring_note = "单选只有全对与全错两档；等价写法不适用于选择题。"
+[[skeletons.objective-single.items]]
+ordinal = 1
+criterion = "【模板骨架】选出唯一正确选项，与答案键一致；错选、多选、少选均不得分"
+ratio_permille = 1000
+required = true
+depends_on = []
+placeholder = true
+
+[skeletons.objective-multiple]
+scoring_mode = "全对才给分"
+label = "客观题·多选"
+scoring_note = "官方 2024 年起部分给分规则（供教师建模参考，非本骨架自动实现）：全部选对得满分；有错选得 0 分；部分选对且无错选时，2 个正确选项选对 1 个得 3 分，3 个正确选项选对 1 个得 2 分、选对 2 个得 4 分。v1 骨架只给「全对」单档，需要部分给分的教师应按当年细则改写评分项（见 README「已知限制」）。"
+[[skeletons.objective-multiple.items]]
+ordinal = 1
+criterion = "【模板骨架】选出全部正确选项；有错选不得分（部分选对的给分规则须教师按当年评分细则补充）"
+ratio_permille = 1000
+required = true
+depends_on = []
+placeholder = true
+
+[skeletons.objective-blank]
+scoring_mode = "全对才给分"
+label = "客观题·填空"
+scoring_note = "填空题按答案键与等价规则判定；是否接受未化简结果、单位与取值范围须教师按题目要求明确。"
+[[skeletons.objective-blank.items]]
+ordinal = 1
+criterion = "【模板骨架】填入结果与答案键等价（含等价写法、单位、取值范围与必要化简）"
+ratio_permille = 1000
+required = true
+depends_on = []
+placeholder = true
+
+[skeletons.step-compute]
+scoring_mode = "分步给分"
+label = "解答题·通用计算/求解骨架"
+scoring_note = "通用三步骨架，不承诺与官方评分细则一致；依赖为空表示可独立累加（不强制前置命中）。教师若需要「前置必须命中」语义，须补 depends_on。"
+[[skeletons.step-compute.items]]
+ordinal = 1
+criterion = "【模板骨架】关键建模、转化或方法选择正确（如设元、列式、建系、构造函数、分类讨论起点）"
+ratio_permille = 300
+required = false
+depends_on = []
+placeholder = true
+[[skeletons.step-compute.items]]
+ordinal = 2
+criterion = "【模板骨架】主要运算/推理过程基本完成，关键中间结论正确"
+ratio_permille = 400
+required = false
+depends_on = []
+placeholder = true
+[[skeletons.step-compute.items]]
+ordinal = 3
+criterion = "【模板骨架】最终结论正确且符合题意（取值范围、单位、检验、取舍）"
+ratio_permille = 300
+required = false
+depends_on = []
+placeholder = true
+
+[skeletons.step-proof]
+scoring_mode = "分步给分"
+label = "解答题·通用证明骨架"
+scoring_note = "证明题通用骨架；依赖链表达「先构造后推理、最后结论」的常规顺序。若当年证明不要求先构造，教师应删减依赖。"
+[[skeletons.step-proof.items]]
+ordinal = 1
+criterion = "【模板骨架】明确已知与求证，写出关键辅助构造（辅助线、辅助函数、坐标系、反设等）"
+ratio_permille = 300
+required = false
+depends_on = []
+placeholder = true
+[[skeletons.step-proof.items]]
+ordinal = 2
+criterion = "【模板骨架】推理链条完整：每步给出依据（定义、定理、公式、性质），无跳步"
+ratio_permille = 400
+required = false
+depends_on = [1]
+placeholder = true
+[[skeletons.step-proof.items]]
+ordinal = 3
+criterion = "【模板骨架】结论成立且表述规范（范围、等号成立条件、反证收尾）"
+ratio_permille = 300
+required = false
+depends_on = [1, 2]
+placeholder = true
