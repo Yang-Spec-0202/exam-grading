@@ -38,7 +38,7 @@ scripts/acceptance/run.sh --quick --skip-bench
 
 | 条目 | 当前状态 | 关键依据（详见各条） |
 |---|---|---|
-| S1 全流程 | 阻塞 | UI 端到端未跑；无仓库级 `fixtures/` |
+| S1 全流程 | 已自动化（backend） | `egctl acceptance --fixtures fixtures/paper-20q` 全链路 PASS（287 断言/9 负向/12 步骤，含外部夹具 capture 归组 + OCR/judge 回放 + expected 逐题断言）；UI 键鼠 E2E 仍待办 |
 | S2 客观题确定性 | 待测 | 缺 500 条金标；规则/比较器夹具已有 |
 | S3 解答题准确率 | 待测 | 缺 200 条金标与真实判定模型/校准 |
 | S4 门禁有效 | 部分已测 | 门禁组合夹具；无真实改分数据 |
@@ -55,13 +55,59 @@ scripts/acceptance/run.sh --quick --skip-bench
 
 ### S1 全流程（20 题数学试卷 + 40 份作业，离线，无未处理崩溃）
 
-- **目标**：参考答案 + 规则 → 导入 40 份作业 → 识别/对齐/两层判分 → 复核 → 导出，全程离线完成。
-- **前置数据（夹具）**：1 份合成 20 题数学试卷（`eg-grade/tests/common` 的 19/20 题夹具可复用）；40 份合成提交（同一试卷、不同答案）；**无真实学生试卷**；`fixtures/` 仓库级目录当前不存在（见 §4-L9），用 crate 内合成夹具替代。
-- **步骤**：① 建卷/答案键/规则并确认；② 批量导入 40 份（一次性/按班）；③ 观察任务队列完成与失败清单；④ 全部自动接受或转复核；⑤ 导出 XLSX/CSV/HTML；⑥ 全程断网。
-- **判定**：40 份全部处理完成、无未处理崩溃；导出文件可打开、行数=40×20；失败与待复核项显式可见（允许人工，但不得静默丢题）。
-- **当前状态**：`阻塞`（UI 端到端未执行；工作区并行收尾中；无仓库级夹具与真实试卷）。
-- **证据位置**：分项证据：`crates/eg-grade/tests/fixtures_20.rs`、`eg-align/tests/*`、`eg-capture/tests/import.rs`、`eg-report/tests/export.rs`、`eg-app/src/pages/*`（页面代码存在，未跑 UI E2E）；`scripts/acceptance/run.sh` 的 `test` 步骤（当前 1063 passed）；**端到端运行记录仍缺**。
-- **已知限制**：无真实试卷；UI 键鼠 E2E 未做；并行开发期间构建/测试有波动（§6）。
+- **目标**：参考答案 + 规则 → 导入作业 → 识别/对齐/两层判分 → 复核 → 导出，全程离线完成。
+- **自动化状态**：`已自动化（backend）`。`egctl acceptance --fixtures fixtures/paper-20q` 一条命令跑通 12 个步骤：
+  临时数据根 + migrations → capture（真实 PNG/JPEG、原生多页归组、重复字节去重、EXIF 90°）→
+  recognize（FixtureCatalog 回放外部 OCR 夹具 + 负向拒绝）→ align（外部模板/名单/OCR → 逐题区域）→
+  grade（fixture judge + expected 逐题断言）→ review（改分 + 撤销 + 抽样只读负向）→
+  report（XLSX/CSV/HTML + 导出记录 + 重放摘要一致）→ 内置链路与外链 4 个 external-* 步骤。
+  2026-11-05 实测：**287 断言 / 9 负向 / 0 失败 / 4 条非阻断 warning**，PASS。
+  **UI 键鼠 E2E（S7）仍为人工待办**；本命令不启动 Slint 桌面、不依赖真实模型/网络。
+- **前置数据**：仓库级 `fixtures/paper-20q`（`paper.json`/`rubric.json`/`template.json`/`students.json`/
+  `expected/grades-expected.json`）+ `fixtures/images`（3 学生×2 页、重复字节、EXIF、名单外相机文件名）+
+  `fixtures/ocr`（7 页记录 + 2 负向）+ `fixtures/judge`（8 条正常/低置信/冲突记录 + 1 负向）。
+- **命令**：
+
+  `egctl acceptance --fixtures fixtures/paper-20q --data-dir <临时目录> --json --out /tmp/acceptance-s1.json`
+
+  退出码：`0` = PASS，`1` = FAIL；`--json` 输出步骤/断言数/失败/负向用例/产物路径；`--out` 另写 JSON 文件。
+- **步骤（12 步，全部真实执行）**：
+  ① env：临时数据根 + migrations（schema v3）+ 审计链 + 配置校验 + 基础行落库；
+  ② fixtures：外部夹具只读契约校验（20 题/150000 毫元/3 学生/规则 active/期望 3×20/图片/OCR/judge 索引）；
+  ③ capture（内置链路）：真实 PNG 导入 + 重复字节 + 名单外；
+  ④ recognize（内置链路）：scripted OCR + 畸形输出负向；
+  ⑤ align（内置链路）：文件名身份 + 区域/答案；
+  ⑥ grade（内置链路）：内置 20 题夹具逐题路由/判定/得分/状态；
+  ⑦ review：改分/撤销/抽样只读负向；
+  ⑧ report：三格式导出 + 导出记录 + 重放摘要一致；
+  ⑨ **external-capture**：`fixtures/images/*` 交给真实 `eg-capture`；`ImportReport.groups` 原生归组为
+     5 组（3 名学生的 2 页组 + EXIF 单页 + 名单外单页，共 8 页；重复字节同批跳过）；
+  ⑩ **external-recognize**：`FixtureCatalog` 按（student_no, page_no）语义回放 7 页 OCR 输出，
+     bbox 按 OCR 输入/页高比例还原为页归一化坐标；负向（缺 blocks、barcode 块）必须被拒绝；
+  ⑪ **external-align**：外部模板/名单/OCR 跑 `eg_align::align`（模板路径）；身份/区域/答案；
+     名单外相机文件名必须未决；
+  ⑫ **external-grade**：按 `expected/grades-expected.json` 逐学生逐题断言（185 断言）：
+     - 总分：张三 132000、李四 77000、王五 109000（毫元）；
+     - Q9–Q11 李四部分给分 3000/2000/3000；Q17 李四低置信 → `needs_review(low_confidence)`；
+       Q16 王五「规则一致/模型不一致」冲突 → `needs_review(conflict)`；Q19 仅规则/分步；
+       Q20 全部 `manual`（`answer_key_omitted`）；名单外身份未决；
+     - judge 用例回放 `fixtures/judge` 的 normal/low_confidence/conflict/negative；Q16 李四/王五、Q17、Q19
+       命中夹具；Q15、Q16 张三、Q18 属夹具覆盖缺口（expected `evidence=rule`），使用确定性规则回退，
+       并在 warning 中如实标注（不伪造夹具命中）。
+- **产物**：临时数据根下 migrations/DB、导出文件（XLSX/CSV/HTML）、审计记录；`--out` JSON；
+  失败时 JSON `failures` 给出断言 id + 实际/期望定位。
+- **已知限制（如实保留）**：
+  1. 规模：端到端自动化夹具为 3 名学生 × 20 题；S1 目标的 40 份批量规模与真实学生试卷未执行。
+  2. 真实模型未参与：OCR/judge 使用 fixture 后端（CI 可重复的前提）；真实模型精度见 S2/S3。
+  3. UI 键鼠 E2E（导入拖拽→复核工作台→导出按钮）仍为人工验收（S7）。
+  4. 链路经 crate 级端口直接驱动，不经过 `eg-app` 组合根的任务队列/取消/断点；external 链路
+     未把 align/grade 结果持久化到 DB（组合根 TODO）。
+  5. 夹具覆盖缺口：judge 仅 8 条（Q16 李四/王五、Q17、Q19），Q15/Q16 张三/Q18 规则回退；
+     OCR 生成器 bbox 存在二次缩放（已由 acceptance 适配层还原，生成器 TODO）；逐题置信度按
+     OCR 块/页级置信度适配（`TODO(fixtures)`），不等于真实识别置信度分布。
+  6. expected 与 grade 路由在「Q16 李四」上存在口径差异：expected 要求模型 partial 覆盖规则
+     mismatch（否则规范 §8 会判冲突）；acceptance 仅在「expected evidence=judge 且该题有 judge
+     夹具」时把具体键降级为 rubric-only，不改 expected/夹具文件。
 
 ### S2 客观题确定性（500 条标注，规则判定一致率 100%）
 

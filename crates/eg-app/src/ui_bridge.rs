@@ -58,6 +58,7 @@ pub(crate) fn apply_view(ui: &AppWindow, view: &ViewModel, strings: &Strings) {
         setting_key_hint: labels.setting_key_hint.into(),
         setting_value_hint: labels.setting_value_hint.into(),
         review_score: labels.review_score.into(),
+        review_image: labels.review_image.into(),
         image_evidence: labels.image_evidence.into(),
         sampling_title: labels.sampling_title.into(),
         sampling_single: labels.sampling_single.into(),
@@ -81,6 +82,7 @@ pub(crate) fn apply_view(ui: &AppWindow, view: &ViewModel, strings: &Strings) {
     ui.set_diagnostics_page(view.diagnostics.visible);
     ui.set_sampling_visible(view.review.sampling.visible);
     ui.set_review_score(view.review.score_input.as_str().into());
+    ui.set_review_queue_text(view.review.counts.as_str().into());
     let reasons: Vec<slint::SharedString> = view
         .review
         .reasons
@@ -199,6 +201,10 @@ pub(crate) fn apply_event_now(
     event: Event,
 ) {
     let started = Instant::now();
+    let image_path = match &event {
+        Event::ReviewImage { path } => Some(path.clone()),
+        _ => None,
+    };
     let view = {
         let Ok(mut guard) = state.lock() else {
             return;
@@ -207,6 +213,17 @@ pub(crate) fn apply_event_now(
         guard.view(crate::i18n::strings())
     };
     apply_view(ui, &view, crate::i18n::strings());
+    if let Some(path) = image_path {
+        match slint::Image::load_from_path(std::path::Path::new(&path)) {
+            Ok(image) => {
+                ui.set_review_image(image);
+                ui.set_review_image_note("".into());
+            }
+            Err(error) => {
+                ui.set_review_image_note(format!("图像证据加载失败：{error}").into());
+            }
+        }
+    }
     metrics.record_event(started.elapsed());
 }
 

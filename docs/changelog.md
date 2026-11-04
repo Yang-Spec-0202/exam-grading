@@ -2,6 +2,39 @@
 
 > 记录规范与行为的变更（按版本倒序）。文档结构变更也在此登记。
 
+## [0.3.1] - 2026-11-05（外部夹具 S1 端到端通过，CP-F ✅）
+
+### 验收进展
+
+- `egctl acceptance --fixtures fixtures/paper-20q --json` **PASS：287 断言 / 0 失败 / 9 负向 / 12 步（exit 0，约 1.8 s）**；`cargo test -p egctl` 全绿，clippy/fmt 通过。外部夹具 expected 逐题通过：张三 132000、李四 77000、王五 109000；Q9–11 部分给分、Q17 低置信、Q16 冲突、Q19 仅规则、Q20 manual、名单外未决。
+- **capture 多页归组已交付**（93 测试，3 学生×2 页 → 3 提交×2 页），外部夹具「每学生 2 页同一提交」端到端跑通。
+- 计划口径：CP-F 转 ✅（M8 同步完成）；M9 仍 🟡（UI 人工验收：键盘 E2E/IME/真实重判/redo）；T41 仍 🟡（剩余 S2/S3/S5/S7 与真实模型）。
+- 剩余 app 侧：组合根接入 capture 多页归组接口（当前 app 真实导入仍单文件=单页提交）。
+
+## [0.3.0] - 2026-11-05（fixtures、S1 自动化、app 集成收尾）
+
+### 新增（夹具与验收）
+
+- **仓库自带演示夹具** `fixtures/paper-20q`：20 题数学试卷（含 8 单选/3 多选部分给分/4 填空/3 计算/1 证明/1「略」，150000 毫元）× 3 名学生 + 名单外/不规范命名/重复字节/EXIF 样本；配套 `fixtures/images/`（9 张 2480×3507 合成印刷体答卷）、`fixtures/ocr/`（页级 OCR 期望与负向）、`fixtures/judge/`（逐题判定期望与负向）、`fixtures/expected/grades-expected.json` 与生成器 `fixtures/generator/`。`python3 fixtures/generator/verify_fixtures.py` 自检 **1826 项，0 失败**；`fixtures/MANIFEST.sha256` 记录完整性。
+- **S1 backend 自动化**：`egctl acceptance --fixtures fixtures/paper-20q`（临时数据根）跑通
+  「migrations → capture 导入 → recognize（fixture OCR）→ align → grade（fixture judge）→ review 改分/撤销 → report 三格式导出 + 重放一致」；
+  实测 **PASS：83 条断言 / 0 失败 / 6 个负向用例，约 317 ms（release）/ 约 5 s（debug）**；CI 集成测试 `cargo test -p egctl --test acceptance`。记录见 `docs/dev/acceptance.md` §S1。
+- **`eg-inference` fixture-key 回放**：`FixtureCatalog` 装载期重算并校验 `fixture_key`（模型 id/版本/输出 schema/提示词字节/输入字节）与全部 sha256，三级匹配（精确键 → 组合键 → 语义标识），未命中显式 `FixtureMiss`、歧义报 `Internal`；`fixtures_wiring` 集成测试（真实仓库夹具 5 项）通过。接入 `egctl acceptance` 仍为 TODO。
+
+### 变更（app 集成收尾）
+
+- **导入真实落库**：`eg-app` 导入从内存资产槽改为 `AssetStore::put`（资产文件+行）+ `eg_capture::persist` 单事务写 Submission/Page/审计；导入前 `enqueue→claim` 任务并用 `persist(task_id)` 推进阶段、完成后 `complete`。外部夹具实测：9 个图片文件 → 成功 9 / 失败 0 / 拒收页 0 / 同批重复 1（去重）→ **8 提交 / 8 页 / 资产链接 32 / 审计 17**，命名提醒仅一次；详见 `docs/dev/research/app.md` §8.8。
+- **报表导出联动**：报表页新增「导出报表」命令（`Report::build/export` + `insert_export_record` 审计）；导出成功清 `report_refresh_required` 并显示导出摘要；导出后的复核改分/撤销置 stale 并在报表页提示「请重新导出」。
+- **复核工作台真实适配**：队列/详情/命令/撤销/提交级排除/导出改走 platform v3（`list_grade_records_for_queue`、`load_grade_evidence_summary`、`append_grade_record_with_reasons`、`audit::command_write`、`push_undo/pop_undo`、`insert_export_record`）；页面 VM/通道协议不变。
+- **图像证据懒加载 + 三栏最小版**：`Event::ReviewImage` 携带 platform 资产路径，UI 线程加载 `slint::Image`，加载失败显式提示；复核页为「队列 / 图像+证据 / 判定操作」三栏。
+- 已知限制（未完成项，已在文档标注）：多页归组未接（capture 单文件=单页提交）、`RegradeEngine` 真实重判未接（显式失败保留原判）、redo 仍内存、规则模型整理未接、UI 键盘 E2E 与中文 IME 人工验收待办。
+
+### 文档
+
+- `tasks/plan.md`：M0–M10 与 CP-A…CP-H 增加状态列（M0–M9 完成；M10 进行中；CP-D/CP-E/CP-G/CP-H 部分）。
+- `tasks/todo.md`：新增 T01–T41 状态总览（✅ 33 / 🟡 8 / ⬜ 0）与 T41 待办清单；新增「本轮追加工作」表（fixtures、S1 自动化、app 导入、多页归组待做）。
+- `docs/README.md` 里程碑表同步；`docs/user/quick-start.md` 增加「仓库自带演示夹具」S1 后端自测小节；`docs/book/src/**` 重新生成。
+
 ## [0.2.4] - 2026-11-03（实现期偏差回写）
 
 ### 变更（规范补丁，零实现改动）

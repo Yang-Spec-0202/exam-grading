@@ -1,6 +1,6 @@
 # 研究记录：inference（注册表/夹具/许可门禁 · 本地后端生命周期 · 任务授权/熔断/预算）
 
-> 状态：已完成（T19–T20）· 2026-11-02（Asia/Shanghai）· 2026-11-03 增补：platform v2 `ConsentState::Exhausted` 接线（§8-D2）· 对应规范：`SPEC-inference.md` v0.2.3（§2/§3/§4/§5/§9）、`CONFIG.md` v0.2.3（§4/§5/§10/§14）、`SPEC-domain.md` v0.2.2（§8）、`CAPABILITY-MAP.md` v0.2 §2/§3、`AGENTS.md`
+> 状态：已完成（T19–T20）· 2026-11-02（Asia/Shanghai）· 2026-11-03 增补：platform v2 `ConsentState::Exhausted` 接线（§8-D2）· 2026-11-04 增补：仓库级 `fixtures/` 夹具接线（§5.3，task-53）· 对应规范：`SPEC-inference.md` v0.2.3（§2/§3/§4/§5/§9）、`CONFIG.md` v0.2.3（§4/§5/§10/§14）、`SPEC-domain.md` v0.2.2（§8）、`CAPABILITY-MAP.md` v0.2 §2/§3、`AGENTS.md`
 > 实测环境：Apple M4 / 16 GB / macOS 27.0.1（26A434）/ rustc 1.99.1（`58cf8f9c3 2026-10-13`）
 > 结论用于：`crates/eg-inference/**`（实现）、`crates/eg-inference/assets/models.registry.toml`（默认注册表）
 > 关联记录：`models.md`（模型清单/许可/下载脚本）、`inference-serving.md`（serving 栈/端点/延迟/内存）、`platform.md`（平台接口）。本文**不重复**前两者已确认的模型与 serving 事实，只补本模块实现契约所需的结论。
@@ -30,6 +30,7 @@
 | Q10 | 云端 DeepSeek 的 base_url/鉴权/JSON 输出/价格档，与本模块的哪些字段对应？ | §4-Q10、§5.4 |
 | Q11 | `eg-platform` 已提供哪些接口可支撑 `ModelCall` 落库、审计、授权校验、时钟与 id？是否有缺口？ | §4-Q11、§5.5 |
 | Q12 | 传输层：std 无 TLS，云端 `https://` 如何处理才不违背「失败显式」？ | §4-Q12、§7-R1 |
+| Q13 | 仓库级 `fixtures/ocr/**`、`fixtures/judge/**` 如何接入？键与记录格式、匹配优先级、畸形/负向样例如何隔离？ | §4-Q13、§5.3、§5.6 |
 
 ## 3. 来源
 
@@ -47,6 +48,7 @@
 | S10 | 本机 `cargo tree -p eg-inference --depth 1`、`Cargo.lock` | 2026-11-02 | 命令输出 | 依赖实测版本（§5.1） |
 | S11 | 本机 `cargo test -p eg-inference`、`cargo clippy -p eg-inference --all-targets -- -D warnings`、`cargo fmt -p eg-inference --check` | 2026-11-02 | 命令输出 | 101 个测试全绿；clippy/fmt 通过（§6） |
 | S12 | `docs/dev/research/platform.md` + `crates/eg-platform/src/**` | 2026-11-02（已稳定，128 测试） | 本仓库研究记录 + 源码 | `Platform::open`/`open_with`/`close`、`audit.business_write`、`db.read/write`、`repo::insert_model_call`/`list_model_calls`、`consents.register/is_valid/revoke` |
+| S13 | `fixtures/README.md`（含 `MANIFEST.sha256`）· `fixtures/generator/keygen/src/main.rs` | 2026-11-04 | 本仓库夹具契约 + 生成器源码 | 索引字段（`kind`/`backend`/`records[]`/`negative[]`）、记录 schema（与 `FixtureEntry` 一致）、键 = `fixture_key(model_id, version, schema, prompt_bytes, input_bytes)`、负向样例语义（`ocr/negative` 结构/语义拒绝、`judge/negative` 打分非法） |
 
 > 说明：本轮实现期**联网复核被沙箱拒绝**（`raw.githubusercontent.com` 解析到非公网地址），因此外部契约以
 > 仓库内 2026-11-02 的**一手实测记录**（S4/S5）为准，不重新臆测上游版本；涉及「应该存在」的 API 一律未采用。
@@ -67,6 +69,7 @@
 | Q10 | 云端条目 `backend="openai_compat"`、`base_url="https://api.deepseek.com"`、`credentials_env="DEEPSEEK_API_KEY"`（只存变量名，密钥由平台密钥库/环境注入）；请求 `POST {base_url}/chat/completions`，`Authorization: Bearer`，`response_format={"type":"json_object"}`；价格按官方文档换算成微元/百万 token 两档（flash：未命中输入 1/2、命中 0.02/0.04、输出 4/8 元）。上下文 1 048 576、输出上限 393 216 写入注册表。 | S5 §8、S8 + `registry.rs`/`openai.rs`/`service.rs` |
 | Q11 | 平台已够用，无需改 `eg-platform`：`Platform::open(DataDirs::resolve()?)`（测试用 `open_with(dirs, Arc::new(FixedClock::new(ms)))`）、`close()`；`config()/db()/audit()/consents()/ids()/clock()` 覆盖所需。落库路径：`audit.business_write(entry, |tx| { repo::insert_model_call(tx, &call); audit.append_in_tx(tx,..) })`（同一事务）；读回 `db.read(|conn| repo::list_model_calls(conn, task_id))`；授权：`consents.register(...)` 后 `validate_call(...)`，撤销/结束用 `list_by_task` 区分。**额度用尽**：平台 v2 已提供 `ConsentState::Exhausted` 与 `mark_exhausted`/`is_exhausted`/`record_spend`；本 crate 已接 `mark_exhausted`（持久化、重启后仍拒绝），`record_spend`（部分余额持久化）尚未接（§8-D2 余项）。 | S12 + `platform_adapter.rs`（真实 `Platform` 集成测试 4 个） |
 | Q12 | 内置传输仅 `http://`，`https://` 明确返回 `TransportUnsupported`（`Permanent`，不计熔断），**不静默降级、不绕过授权**。v1 云端默认关（`privacy.cloud_enabled=false`）+ 逐任务授权，真正开启前需显式接入 TLS 传输（见 §7-R1）。本地回环不需要 TLS。 | S1 §2.2/§4 + `http.rs`（https 显式失败测试） |
+| Q13 | 夹具记录与 `FixtureEntry` **同 schema**（`schema_version/key/model_id/model_version/prompt_schema_version/output_raw`），键同样是 `fixture_key(model_id, version, schema, prompt_bytes, input_bytes)`；索引额外给出 `prompt_sha256`/`input_sha256`/`fixture_key`/`output_sha256` 与语义标识。`FixtureCatalog` 装载时**重算键并复核全部 sha256**（不一致即拒绝），三级匹配 = 精确键 → 组合键（角色+提示词 sha256+资产 sha256，模型 id 可放宽）→ 语义标识（OCR 学生号/stem+页码，judge 学生号+题号）；负向样例只暴露不索引。 | S13 + `fixtures_wiring.rs`（真实仓库夹具 5 个集成测试） |
 
 ## 5. 实现契约细节（实现事实源）
 
@@ -95,6 +98,13 @@
 
 - `FixtureEntry{key, model_id, model_version, prompt_schema_version, output_raw}`；`FixtureStore::insert` 拒绝重复键与非 JSON 对象输出（`output_raw` 必须是单个 JSON 对象字符串）；`load_dir` 只读 `*.json`，坏文件显式报错（不跳过）。
 - 回放：命中即返回录制字节（`ValidatedOutput` 仍走同一 Schema 校验，录制内容不合法 → `SchemaViolation`），引擎指纹 `backend=fixture`。录制模式仅开发构建可用（规范 §9.11），本 crate 不提供录制入口。
+- **仓库级夹具接线（task-53，`src/fixture_disk.rs`）**：`fixtures/ocr/**`、`fixtures/judge/**` 是仓库提交的确定性 E2E 夹具（7 条 OCR + 8 条 judge + 3 条 negative，`fixtures/README.md`）。`FixtureCatalog::load(fixtures_root)` 读取 `ocr/index.json`、`judge/index.json`，装载记录并建三级索引：
+  | 优先级 | 匹配键 | 用途 |
+  |---|---|---|
+  | 1（最高） | 精确字节键（记录里的 `key`） | 输入图/输入 JSON 与录制时逐字节相同（推荐给 egctl/app 验收） |
+  | 2 | 组合键 `(角色, prompt sha256, 输入资产 sha256)`，可再限定模型 id/版本 | 调用方注册表模型 id 与录制 id 不同（跨 crate E2E） |
+  | 3 | 语义标识：OCR `(学生号或文件 stem, 页码)`；judge `(学生号, 题号)` | capture 派生图/重新序列化的输入（字节不同） |
+  未命中一律 `FixtureMiss`；同一级命中多条 → `Internal`（夹具集损坏，不猜）。装载期做**完整性校验**：记录/提示词/资产文件 sha256 与索引一致、用仓库内 `fixture_key` 从「提示词字节 + 输入字节 + 索引 backend 身份」重算键必须等于记录 `key` 与索引 `fixture_key`、`output_raw` 的 sha256 必须等于索引 `output_sha256`；任一不符拒绝加载（防「回放错页」/夹具漂移）。`negative/**` 只经 `negatives()` 暴露用于拒绝断言，**不进入回放索引**。`FixtureBackend::with_catalog(...)` 让精确键 miss 时按组合键回退；`fixture_backend(role)` 直接用索引 backend 身份构造精确回放后端。示例：`cargo run -p eg-inference --example fixtures_load -- fixtures`（打印角色/条数/三级命中，不打印正文）。
 
 ### 5.4 授权/熔断/预算/云端
 
@@ -114,11 +124,35 @@
 | `Clock` | `platform.clock()` | 所有时间只经注入时钟（测试用 `FixedClock`/`TestClock`） |
 | 授权登记 | `register_cloud_consent` | 包 `register` + `validate_call` 的便捷入口 |
 
+### 5.6 夹具接入（给 recognize / grade / egctl）
+
+`FixtureCatalog` 是**只读**装载器，三种接入方式（按需选一，不要复制读取逻辑）：
+
+1. **egctl / app 验收（推荐，逐字节精确）**
+   ```text
+   catalog = FixtureCatalog::load("fixtures")?            // 7 OCR + 8 judge
+   backend = catalog.fixture_backend(FixtureRole::Ocr)?   // 用索引 backend 身份 + 精确键
+   service = InferenceService::new(registry_with_fixture_entries, Backend::Fixture(backend), ...)
+   ```
+   注册表条目用 `catalog.backend_ids(role)` 的 `model_id/model_version/prompt_schema_version`，
+   `backend = "fixture"`（`ModelRegistry::parse_str` 可直接解析）；请求的 `prompt` 用
+   `prompt_source` 的字节、`input` 用 `asset_source` 的字节。
+2. **recognize / grade 的适配层（字节不同）**：`resolve(&FixtureLookup::new().page(...))`
+   或 `by_question(...)` 取 `output_raw`，再交给各自 Schema/语义校验；
+   种子数据来自 `fixtures/README.md` §3 的 `grades-expected.json`/`index.json`。
+   OCR 注意 §7-R11 的 Schema 形状差异。
+3. **跨注册表模型 id（不想改注册表）**：`catalog.fixture_store(role)` + 自己的
+   `FixtureBackend::new(自己的 id/版本/schema, store).with_catalog(Arc::new(catalog), role)`
+   → 精确键 miss 时按组合键回退（`tests/fixtures_wiring.rs` 已端到端覆盖）。
+
+负向样例：`catalog.negatives()` 只用于断言 `OcrOutput::validate`/`JudgeOutput::validate` 必须拒绝
+（`fixtures/ocr/negative/*` 结构/条码块，`fixtures/judge/negative/*` match 却 0 分），**不得**当正向回放。
+
 ## 6. 版本实测与实现地图
 
 | 项 | 实测 |
 |---|---|
-| 测试 | `cargo test -p eg-inference`：**102 passed / 0 failed**（unit 85 + `tests/platform_adapter.rs` 4 + `tests/service_flow.rs` 13；`tests/live_smoke.rs` 1 个默认 `#[ignore]`，见下行）；夹具「同输入 100 次字节一致」、1000 个畸形判定输出全拒、授权矩阵（无授权/撤销/过期/范围/预算）全部断言 **0 次外联**（桩传输计数） |
+| 测试 | `cargo test -p eg-inference`：**114 passed / 0 failed**（unit 92 + `tests/fixtures_wiring.rs` 5 + `tests/platform_adapter.rs` 4 + `tests/service_flow.rs` 13；`tests/live_smoke.rs` 1 个默认 `#[ignore]`，见下行）；夹具「同输入 100 次字节一致」、1000 个畸形判定输出全拒、授权矩阵（无授权/撤销/过期/范围/预算）全部断言 **0 次外联**（桩传输计数） |
 | 静态检查 | `cargo clippy -p eg-inference --all-targets -- -D warnings` 通过；`cargo fmt -p eg-inference --check` 通过 |
 | 真实 serving 冒烟 | **已执行 1 次**（`tests/live_smoke.rs`，默认 `#[ignore]`，真实 llama.cpp 0.8.0 + 真实权重 `qwen3.5-4b-instruct` Q4）：冷启动 → `/health ok` **2 940 ms**（≤8 s）、单次判定 **1 791 ms**、usage 83 in / 29 out、输出 JSON 通过 `JudgeOutput` Schema；测试末尾 SIGTERM 停止并断言 `Stopped`，`pgrep llama-server` 确认**无本进程孤儿**。真实模型判定质量不在断言范围（只断言输出是单个 JSON 对象） |
 
@@ -130,7 +164,9 @@
 | `src/http.rs` | 最小 HTTP/1.1 传输（含 chunked），https 显式拒绝 | 4 |
 | `src/openai.rs` | 请求体、响应解析、usage、严格 JSON 提取 | 6 |
 | `src/schema.rs` | OCR/判定/路由/规则整理输出校验（严格、拒绝修复） | 10 |
-| `src/fixture.rs` | 夹具键/存储/回放/损坏拒绝 | 6 |
+| `src/fixture.rs` | 夹具键/存储/回放/损坏拒绝；`FixtureBackend` 组合键回退 | 6 |
+| `src/fixture_disk.rs` | 仓库夹具目录加载：索引解析、完整性校验、三级匹配、negative 隔离 | 7（另 `tests/fixtures_wiring.rs` 5 个仓库夹具集成） |
+| `examples/fixtures_load.rs` | 仓库夹具装载/三级匹配演示（示例，非测试） | — |
 | `src/local.rs` | 端口分配、拉起/探活/重启/停止、serve 参数、健康 | 11 |
 | `src/breaker.rs` | 熔断状态机 | 5 |
 | `src/budget.rs` | 微元计价（向上取整）与任务账本 | 5 |
@@ -152,6 +188,10 @@
 - **R7 生命周期为进程内单实例**：同一 `LocalServer` 句柄内串行管理；跨任务并发由调用方排队（注册表 `max_concurrency` 仅声明，未做客户端限流）。多实例/跨进程复用留待 `app` 集成阶段。
 - **R8 HTTP 客户端子集**：不支持 TLS/重定向/gzip/HTTP2/流式 SSE（`stream=false` 固定）；llama-server 与 DeepSeek 非流式端点均在本子集内，实测记录见 S4。
 - **R9 熔断/预算状态在内存**：进程重启清零。规范未要求跨重启持久化熔断；预算持久化由平台账本承担（当前未接，见 R2）。
+- **R11 仓库 OCR 夹具与 `OcrOutput` 形状不一致（跨模块已知偏差）**：`fixtures/ocr/**` 按 `SPEC-recognize` 产出 `{schema_version,page,blocks[{kind,bbox,text,latex,confidence}]}`，而当前 `inference::OcrOutput` 只认 `{blocks:[{kind,text,confidence}]}`（`recognize.md` 已记录「inference OCR 输出为中间版本」）。因此**经 `InferenceService` + `ExpectedSchema::Ocr` 回放 OCR 夹具会 `SchemaViolation`**；judge 不受影响（已端到端验证）。接线建议：recognize 阶段用 `FixtureCatalog` 直接取字节并自行结构校验；待两边 Schema 对齐后再切回服务层（需改规范/两 crate，属 Ask first）。
+- **R12 组合键回退必须显式挂接**：只有 `FixtureBackend::with_catalog` 才启用回退；且同角色「同提示词+同输入」重复会在装载期失败（`index_record` 去重），不做静默择一。
+- **R13 语义标识依赖索引字段**：OCR 记录必须有 `page_no` + `submission_stem`（`student_no` 可空），judge 必须有 `student_no` + `question_ordinal`；缺字段或重复即拒绝加载。夹具增删后需重跑 `fixtures/generator/verify_fixtures.py`。
+- **R14 索引路径相对 `fixtures/` 根**：`FixtureCatalog::load(root)` 要求 `<root>/ocr|judge/index.json` 且记录路径为 `ocr/...`/`judge/...` 相对路径；自定义根需保持同布局（`resolve_relative` 拒绝绝对路径与 `..`）。
 - **R10 真实 serving 只做了 1 次冒烟**：权重不在仓库（由 `pull.sh` provisioning，约 1.8 GB/2.7 GB），默认测试集不依赖真实模型；已用桩覆盖全部失败模式与生命周期，真实链路（拉起 → `/health` → `/v1/chat/completions` → JSON 提取 → 停止）由 `tests/live_smoke.rs` 覆盖并可复跑（§9）。冒烟只证明本机单模型通路，不代表生产并发/长稳。
 
 ## 8. 与规范的偏差（待裁定，均不改变验收行为）

@@ -1,6 +1,6 @@
 # 快速开始
 
-> 状态：M10 文档初稿（计划中）。本页描述目标路径；桌面外壳与业务模块尚在实现，实际界面与按钮以发布版本为准。未标注「已可用」的步骤均属计划。
+> 状态：M10 文档初稿（2026-11-05）。M0–M9 主体实现完成（S1 backend 自动化已 PASS），M10 进行中；本页描述目标使用路径，**桌面 UI 仍为开发阶段**（未做人工键盘/IME 验收）。文末「仓库自带演示夹具」是当前**已可执行**的后端自测路径；未标注「已可用」的界面步骤以发布版本为准。
 
 ## 0. 开始前准备
 
@@ -72,6 +72,46 @@
 2. 文件名规则：整卷 `试卷名_模式_时间戳`；学生成绩单 `学生名_试卷名_模式_时间戳`；脱敏追加 `_脱敏`。
 3. 导出是原子的：要么完整生成，要么不产生文件；已存在的同名文件默认不覆盖。
 4. 导出后如再改分，需要重新导出（报表按最新修订重算）。
+
+## 仓库自带演示夹具（S1 后端自测，已可用）
+
+仓库内置一套合成演示夹具，用于在没有真实学生数据时验证端到端链路（不联网、不上传任何数据）：
+
+- `fixtures/paper-20q/`：20 题数学试卷、班级与 3 名学生名单、答案键/规则/模板、`expected/` 期望判分；
+- `fixtures/images/`：9 张合成印刷体答卷页（含 3 名学生各 2 页、重复字节 1、EXIF 旋转 1、不规范命名 1）；
+- `fixtures/ocr/`、`fixtures/judge/`：OCR/判定期望与负向样例；
+- `fixtures/generator/`：夹具生成与自检脚本（`verify_fixtures.py`）。
+
+### 1) 校验夹具完整性
+
+```bash
+python3 fixtures/generator/verify_fixtures.py
+```
+
+期望输出：`检查项：1826，失败：0`、`[ok] fixtures 自检全部通过`。
+
+### 2) 跑 S1 后端自动化验收（推荐）
+
+```bash
+cargo build -p egctl --release
+./target/release/egctl acceptance --fixtures fixtures/paper-20q
+```
+
+期望：`S1 端到端验收：PASS`、`断言 83 条；失败 0 条`，8 个步骤（env/fixtures/capture/recognize/align/grade/review/report）全 `[PASS]`；退出码 0。
+CI 回归：`cargo test -p egctl --test acceptance`。
+
+> 说明：该命令使用临时数据根，不碰你的正式工作区；OCR/judge 使用 fixture 后端（不启动真实模型）。外部夹具的「每学生 2 页同一提交」多页归组尚未接入，当前端到端仍以内置 20 题夹具驱动——命令输出会以 WARN 明示，**不要**把它当作 UI 或真实模型验收。
+
+### 3) 跑 app 真实导入冒烟（开发用）
+
+```bash
+cargo build -p eg-app --release
+EXAM_GRADING_DATA_DIR=/tmp/eg-app-demo ./target/release/eg-app --smoke
+```
+
+期望（数据根 `/tmp/eg-app-demo`）：真实导入 `fixtures/images` 9 文件 → 8 提交 / 8 页 / 资产链接 32 / 审计 17（同批重复 1 去重、命名提醒一次）；随后补夹具判分、复核改分、导出 XLSX+CSV+HTML。该模式会打开桌面窗口并在数秒后自动退出；无真实模型参与。
+
+详细实测记录：[app 研究记录 §8.8](../dev/research/app.md)、[S1 验收记录](../dev/acceptance.md)。
 
 ## 最短路径检查单
 

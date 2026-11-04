@@ -8,14 +8,14 @@
 use std::path::{Path, PathBuf};
 
 use eg_capture::{
-    FileInput, ImportKind, ImportOptions, ImportRequest, ImportSettings, Importer, MemoryAssetSink,
-    MemoryEventSink, NeverCancel, NoKnownSubmissions, SeqIdSource,
+    FileInput, ImportKind, ImportOptions, ImportRequest, ImportSettings, Importer, MemoryEventSink,
+    NeverCancel, NoKnownSubmissions, PutResult, SeqIdSource,
 };
 use eg_domain::{
     AnswerKey, GradeMode, MilliScore, Question, QuestionKind, RubricDraftItem, ScoringMode,
     Timestamp, Ulid,
 };
-use eg_platform::{LogLevel, LogQuery, Platform, TaskFilter, TaskState};
+use eg_platform::{AssetStore, LogLevel, LogQuery, Platform, TaskFilter, TaskState};
 use eg_review::{
     CommandEnvelope, ReviewCommand, ReviewConfig, ReviewReasonCode, ReviewRepository, ReviewService,
 };
@@ -90,11 +90,69 @@ fn collect_files(root: &Path, out: &mut Vec<PathBuf>) -> Result<(), String> {
     Ok(())
 }
 
-/// 执行一次导入并回投进度/报告（路径来自拖拽或文件选择器）。
-pub(crate) fn run_import(paths: Vec<PathBuf>, events: &EventBus) {
-    let total = u32::try_from(paths.len()).unwrap_or(u32::MAX);
+/// platform 资产库适配 `eg_capture::AssetSink`（内容寻址、去重）。
+struct PlatformAssetSink<'a> {
+    assets: &'a AssetStore,
+}
+
+impl eg_capture::AssetSink for PlatformAssetSink<'_> {
+    fn put(&self, bytes: &[u8], media_type: &str) -> Result<PutResult, eg_capture::CaptureError> {
+        self.assets
+            .put(bytes, media_type)
+            .map(|outcome| PutResult {
+                asset: outcome.asset,
+                deduped: outcome.deduped,
+                byte_len: outcome.byte_len,
+            })
+            .map_err(|error| eg_capture::CaptureError::Asset(error.to_string()))
+    }
+
+    fn contains(&self, asset: eg_domain::AssetId) -> bool {
+        self.assets.exists(asset)
+    }
+
+    fn get(&self, asset: eg_domain::AssetId) -> Result<Vec<u8>, eg_capture::CaptureError> {
+        self.assets
+            .get(asset)
+            .map_err(|error| eg_capture::CaptureError::Asset(error.to_string()))
+    }
+}
+
+/// 导入上下文：当前试卷与班级（platform 暂无 `list_papers`，此兼容 shim 待平台补 API 后替换）。
+fn import_context(platform: &Platform) -> Option<(eg_domain::ClassroomId, eg_domain::PaperId)> {
+    let row: Option<(String, String)> = platform
+        .db()
+        .read(|conn| {
+            // 平台暂无 list_papers；用行查询并忽略「无行」（兼容 shim，待平台补 API）。
+            Ok::<_, eg_platform::PlatformError>(
+                conn.query_row(
+                    "SELECT id, classroom_id FROM paper ORDER BY created_at LIMIT 1",
+                    [],
+                    |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+                )
+                .ok(),
+            )
+        })
+        .ok()?;
+    let (paper_id, classroom_id) = row?;
+    Some((
+        eg_domain::ClassroomId::parse(&classroom_id).ok()?,
+        eg_domain::PaperId::parse(&paper_id).ok()?,
+    ))
+}
+
+/// 导入核心：capture 预处理（资产直写 platform 资产库）→ `persist` 同事务落库。
+fn import_core(
+    platform: &Platform,
+    paths: &[PathBuf],
+) -> Result<(eg_capture::ImportOutcome, eg_capture::PersistSummary), String> {
+    let Some((classroom_id, paper_id)) = import_context(platform) else {
+        return Err("没有可导入的试卷：请先在试卷页创建试卷".to_owned());
+    };
     let settings = ImportSettings::default();
-    let sink = MemoryAssetSink::default();
+    let sink = PlatformAssetSink {
+        assets: platform.assets().as_ref(),
+    };
     let import_events = MemoryEventSink::default();
     let ids = SeqIdSource::new();
     let cancel = NeverCancel;
@@ -113,18 +171,56 @@ pub(crate) fn run_import(paths: Vec<PathBuf>, events: &EventBus) {
         .iter()
         .map(|path| FileInput::from_path(path.clone()))
         .collect();
-    let batch_id = Ulid::from_u128(1);
     let request = ImportRequest {
-        batch_id,
+        batch_id: Ulid::from_u128(1),
         kind: ImportKind::StudentWork,
-        classroom_id: eg_domain::ClassroomId::from_ulid(Ulid::from_u128(9_100)),
-        paper_id: eg_domain::PaperId::from_ulid(Ulid::from_u128(9_101)),
+        classroom_id,
+        paper_id,
         files,
         options: ImportOptions::default(),
     };
+    let outcome = importer
+        .run(request)
+        .map_err(|error| format!("导入失败：{error}"))?;
+    // 建导入任务并把提交阶段推进到「预处理完成」（platform v3 的任务队列 + persist 联动）。
+    let expected = platform
+        .tasks()
+        .enqueue(eg_platform::NewTask::new(
+            eg_platform::TaskKind::SubmissionGrade,
+            serde_json::json!({"kind": "import", "files": paths.len()}),
+        ))
+        .ok()
+        .map(|outcome| outcome.task_id);
+    // platform `advance_stage` 只接受 running 状态：先 claim 自己刚入队的任务再 persist。
+    let task_id = expected.and_then(|expected_id| {
+        platform
+            .tasks()
+            .claim("eg-app-import")
+            .ok()
+            .flatten()
+            .filter(|record| record.id == expected_id)
+            .map(|record| record.id)
+    });
+    let summary = eg_capture::persist(
+        platform,
+        eg_capture::PersistRequest {
+            outcome: &outcome,
+            task_id,
+        },
+    )
+    .map_err(|error| format!("导入已预处理但落库失败：{error}"))?;
+    if let Some(task_id) = task_id {
+        let _ = platform.tasks().complete(task_id);
+    }
+    Ok((outcome, summary))
+}
+
+/// 执行一次导入并回投进度/报告（路径来自拖拽或文件选择器）。
+pub(crate) fn run_import(platform: &Platform, paths: Vec<PathBuf>, events: &EventBus) {
+    let total = u32::try_from(paths.len()).unwrap_or(u32::MAX);
     events.send(Event::ImportProgress { done: 0, total });
-    match importer.run(request) {
-        Ok(outcome) => {
+    match import_core(platform, &paths) {
+        Ok((outcome, persist)) => {
             let report = &outcome.report;
             let mut rows = Vec::new();
             for failure in &report.file_failures {
@@ -154,21 +250,15 @@ pub(crate) fn run_import(paths: Vec<PathBuf>, events: &EventBus) {
                     detail: format!("{} 页", submission.page_count),
                 });
             }
-            for rejected in &report.rejected_pages {
-                rows.push(ImportRowVm {
-                    name: rejected
-                        .submission_id
-                        .map_or_else(|| "参考答案".to_owned(), |id| id.to_string()),
-                    status: ImportRowStatus::Rejected,
-                    detail: format!("第 {} 页：{}", rejected.page_no, rejected.reasons.join("/")),
-                });
-            }
             let ok = report.files_ok;
             let rejected = report.pages_rejected;
             let failed = report.files_failed;
             let duplicates = u32::try_from(report.duplicates.len()).unwrap_or(0);
-            let summary =
-                format!("成功 {ok} / 拒收 {rejected} / 失败 {failed} / 重复 {duplicates}");
+            let summary = format!(
+                "成功 {ok} / 拒收 {rejected} / 失败 {failed} / 重复 {duplicates}；\
+                 已落库：提交 {} / 页 {} / 资产链接 {} / 审计 {}",
+                persist.submissions, persist.pages, persist.asset_links, persist.audit_entries
+            );
             events.send(Event::ImportProgress { done: total, total });
             events.send(Event::ImportFinished {
                 report: ImportReportVm {
@@ -181,12 +271,27 @@ pub(crate) fn run_import(paths: Vec<PathBuf>, events: &EventBus) {
                 },
             });
         }
-        Err(error) => {
-            events.send(Event::ImportFailed {
-                message: format!("导入失败：{error}"),
-            });
+        Err(message) => {
+            events.send(Event::ImportFailed { message });
         }
     }
+}
+
+/// 复核图像证据：取证据摘要第一张原图的 platform 资产路径（懒加载）。
+pub(crate) fn review_image_event(
+    platform: &Platform,
+    grade_id: eg_domain::GradeId,
+) -> Option<Event> {
+    let summary = platform
+        .db()
+        .read(|conn| eg_platform::repo::load_grade_evidence_summary(conn, grade_id))
+        .ok()
+        .flatten()?;
+    let asset = summary.assets.first()?;
+    let path = platform.assets().path_of(asset.asset_id);
+    Some(Event::ReviewImage {
+        path: path.to_string_lossy().into_owned(),
+    })
 }
 
 /// `eg-capture` 需要 `ClockPort`；用系统时间（导入报告时间）。
@@ -894,13 +999,35 @@ pub(crate) fn notify_error(events: &EventBus, message: String) {
 // 冒烟链路：夹具落库 → platform 队列/复核 → eg-report 导出
 // ---------------------------------------------------------------------------
 
+/// 冒烟用最小 1×1 PNG（让图像证据懒加载有真实文件可读）。
+const SMOKE_PNG: &[u8] = &[
+    0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
+    0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1F, 0x15, 0xC4,
+    0x89, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9C, 0x62, 0x00, 0x01, 0x00, 0x00,
+    0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D, 0xB4, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE,
+    0x42, 0x60, 0x82,
+];
+
+/// 读取 `fixtures/paper-20q` 的真实试卷/班级/名单（与 eg-domain 类型直接反序列化）。
+fn load_fixture_records() -> Option<(
+    eg_domain::Classroom,
+    eg_domain::Paper,
+    Vec<eg_domain::Student>,
+)> {
+    let read = |name: &str| std::fs::read_to_string(format!("fixtures/paper-20q/{name}")).ok();
+    let classroom: eg_domain::Classroom = serde_json::from_str(&read("classroom.json")?).ok()?;
+    let paper: eg_domain::Paper = serde_json::from_str(&read("paper.json")?).ok()?;
+    let students: Vec<eg_domain::Student> = serde_json::from_str(&read("students.json")?).ok()?;
+    Some((classroom, paper, students))
+}
+
 /// 冒烟夹具（只在空库时写入：课堂/学生/试卷/提交/判分记录/任务）。
-pub(crate) fn seed_smoke_fixtures(platform: &Platform) -> Result<(), String> {
+pub(crate) fn seed_smoke_fixtures(platform: &Platform) -> Result<String, String> {
     use eg_domain::{
-        AnswerKey, AssetId, Classroom, ClassroomId, Confidence, EvidenceRef, ExifOrientation,
-        GradeId, GradeRecord, GradeStatus, Judgement, MilliScore, Page, PageQuality, Paper,
-        Question, QuestionId, RosterSource, Rotation, RouteDecision, RouteTrace, Sha256Hex,
-        Student, StudentId, Submission, SubmissionId, SubmissionStatus,
+        AnswerKey, Classroom, ClassroomId, Confidence, EvidenceRef, ExifOrientation, GradeId,
+        GradeRecord, GradeStatus, Judgement, MilliScore, Page, PageQuality, Paper, Question,
+        QuestionId, RosterSource, Rotation, RouteDecision, RouteTrace, Sha256Hex, Student,
+        StudentId, Submission, SubmissionId, SubmissionStatus,
     };
     let filter = eg_platform::repo::GradeQueueFilter::default();
     let existing = platform
@@ -908,7 +1035,26 @@ pub(crate) fn seed_smoke_fixtures(platform: &Platform) -> Result<(), String> {
         .read(|conn| eg_platform::repo::count_grade_records_for_queue(conn, &filter))
         .map_err(|error| error.to_string())?;
     if existing > 0 {
-        return Ok(());
+        return Ok("已有数据（跳过种子）".to_owned());
+    }
+    if let Some((classroom, paper, students)) = load_fixture_records() {
+        let question_count = paper.questions.len();
+        let student_count = students.len();
+        let now = platform.clock().now();
+        platform
+            .db()
+            .write(move |tx| {
+                eg_platform::repo::insert_classroom(tx, &classroom, Some("fixture"), now)?;
+                for student in &students {
+                    eg_platform::repo::insert_student(tx, student, now)?;
+                }
+                eg_platform::repo::insert_paper(tx, &paper)?;
+                Ok(())
+            })
+            .map_err(|error| error.to_string())?;
+        return Ok(format!(
+            "fixtures/paper-20q 试卷（{question_count} 题 / {student_count} 学生）"
+        ));
     }
     let now = platform.clock().now();
     let classroom = Classroom {
@@ -956,7 +1102,11 @@ pub(crate) fn seed_smoke_fixtures(platform: &Platform) -> Result<(), String> {
     let mut pages = Vec::new();
     let mut assets = Vec::new();
     for (index, student) in students.iter().enumerate() {
-        let asset = AssetId::of(format!("smoke-page-{index}").as_bytes());
+        let asset = platform
+            .assets()
+            .put(SMOKE_PNG, "image/png")
+            .map_err(|error| error.to_string())?
+            .asset;
         assets.push(asset);
         let submission_id = SubmissionId::from_ulid(Ulid::from_u128(9_200 + index as u128));
         let page = Page {
@@ -1037,8 +1187,7 @@ pub(crate) fn seed_smoke_fixtures(platform: &Platform) -> Result<(), String> {
                 eg_platform::repo::insert_student(tx, student, now)?;
             }
             eg_platform::repo::insert_paper(tx, &paper)?;
-            for (asset, submission) in assets.iter().zip(submissions.iter()) {
-                eg_platform::repo::insert_asset_row(tx, *asset, 1024, "image/jpeg", now)?;
+            for submission in &submissions {
                 let mut submission = submission.clone();
                 submission.pages = pages
                     .iter()
@@ -1057,7 +1206,7 @@ pub(crate) fn seed_smoke_fixtures(platform: &Platform) -> Result<(), String> {
         eg_platform::TaskKind::SubmissionGrade,
         task_payload,
     ));
-    Ok(())
+    Ok("内置夹具（3 提交 × 1 题）".to_owned())
 }
 
 /// 导出审计：platform 审计链 + `export_record` 落库（同一事务）。
@@ -1225,12 +1374,211 @@ pub(crate) fn export_report(platform: &Platform) -> Result<String, String> {
     ))
 }
 
-/// 冒烟链路：夹具落库 → 复核改分 → 导出（控制台打印，供 §8.6 记录）。
-pub(crate) fn run_smoke_chain(platform: &Platform) -> String {
+/// 夹具图片目录（`fixtures/paper-20q` 由 tech-spike 并行生成；未就绪返回空）。
+fn fixture_image_paths() -> Vec<PathBuf> {
+    let candidates = [
+        "fixtures/images",
+        "fixtures/paper-20q/submissions",
+        "fixtures/paper-20q/images",
+        "fixtures/paper-20q",
+    ];
+    for candidate in candidates {
+        let Ok(entries) = std::fs::read_dir(candidate) else {
+            continue;
+        };
+        let mut files: Vec<PathBuf> = entries
+            .filter_map(std::result::Result::ok)
+            .map(|entry| entry.path())
+            .filter(|path| {
+                path.extension().is_some_and(|ext| {
+                    matches!(
+                        ext.to_string_lossy().to_ascii_lowercase().as_str(),
+                        "jpg" | "jpeg" | "png" | "tif" | "tiff" | "pdf"
+                    )
+                })
+            })
+            .collect();
+        files.sort();
+        if !files.is_empty() {
+            return files;
+        }
+    }
+    Vec::new()
+}
+
+/// 首个题目（id/满分）——导入后补夹具判分记录用（平台暂无需的投影 API，兼容 shim）。
+fn first_question(platform: &Platform) -> Option<(eg_domain::QuestionId, MilliScore)> {
+    let row: Option<(String, i64)> = platform
+        .db()
+        .read(|conn| {
+            Ok::<_, eg_platform::PlatformError>(
+                conn.query_row(
+                    "SELECT id, max_score FROM question ORDER BY paper_id, ordinal LIMIT 1",
+                    [],
+                    |row| Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?)),
+                )
+                .ok(),
+            )
+        })
+        .ok()?;
+    let (id, max) = row?;
+    Some((
+        eg_domain::QuestionId::parse(&id).ok()?,
+        MilliScore::from_milli(max).ok()?,
+    ))
+}
+
+/// 为导入的提交补一条夹具判分记录（S1 链路：识别/对齐/判分流水线未接入的占位）。
+fn append_fixture_grades(
+    platform: &Platform,
+    submissions: &[eg_domain::SubmissionId],
+) -> Result<u32, String> {
+    use eg_domain::{
+        AssetId, Confidence, EvidenceRef, GradeId, GradeRecord, GradeStatus, Judgement,
+        RouteDecision, RouteTrace, Sha256Hex,
+    };
+    let Some((question_id, max_score)) = first_question(platform) else {
+        return Err("没有题目，无法补判分记录".to_owned());
+    };
+    let now = platform.clock().now();
+    let mut written = 0;
+    for (index, submission_id) in submissions.iter().enumerate() {
+        let existing = platform
+            .db()
+            .read(|conn| {
+                eg_platform::repo::get_latest_grade_record(conn, *submission_id, question_id)
+            })
+            .map_err(|error| error.to_string())?;
+        if existing.is_some() {
+            continue;
+        }
+        let Ok(id) = platform.ids().next_ulid() else {
+            return Err("判分记录 id 生成失败".to_owned());
+        };
+        let awarded = MilliScore::from_milli(2_000).unwrap_or(MilliScore::ZERO);
+        let record = GradeRecord {
+            id: GradeId::from_ulid(id),
+            submission_id: *submission_id,
+            question_id,
+            revision: 1,
+            mode: GradeMode::Standard,
+            route: RouteDecision::RuleThenModel,
+            route_trace: RouteTrace {
+                rule_id: "R7".to_owned(),
+                inputs_hash: Sha256Hex::of(b"s1-fixture"),
+                classifier_call: None,
+                decided_at: now,
+            },
+            judgement: Judgement::Partial {
+                score: awarded,
+                satisfied: Vec::new(),
+                missing: Vec::new(),
+                reason: "S1 夹具判分（识别/判分流水线未接入）".to_owned(),
+            },
+            awarded,
+            max_score,
+            confidence: Confidence::new(0.62).unwrap_or(Confidence::ZERO),
+            status: GradeStatus::NeedsReview,
+            evidence: vec![EvidenceRef::Asset(AssetId::of(
+                format!("s1-fixture-{index}").as_bytes(),
+            ))],
+            engines: Vec::new(),
+            created_at: now,
+            reviewed_at: None,
+            review_note: None,
+            sampled: false,
+        };
+        platform
+            .db()
+            .write(move |tx| {
+                eg_platform::repo::append_grade_record_with_reasons(
+                    tx,
+                    &record,
+                    &[eg_domain::ReviewReasonKind::LowConfidence],
+                )
+            })
+            .map_err(|error| error.to_string())?;
+        written += 1;
+    }
+    Ok(written)
+}
+
+/// 冒烟链路：夹具落库 → 复核改分 → 导出；返回（汇总文本, 导出摘要）。
+pub(crate) fn run_smoke_chain(platform: &Platform) -> (String, Option<String>) {
     let mut lines = Vec::new();
     match seed_smoke_fixtures(platform) {
-        Ok(()) => lines.push("导入/落库：夹具 3 提交 × 1 题已写入 platform".to_owned()),
-        Err(error) => return format!("夹具落库失败：{error}"),
+        Ok(source) => lines.push(format!("基础夹具：{source}")),
+        Err(error) => return (format!("夹具落库失败：{error}"), None),
+    }
+    let fixture_paths = fixture_image_paths();
+    if fixture_paths.is_empty() {
+        lines.push(
+            "fixtures/paper-20q 未就绪：使用内置夹具（真实 import+persist 路径跳过，见 app.md §8.7）"
+                .to_owned(),
+        );
+    } else {
+        match import_core(platform, &fixture_paths) {
+            Ok((outcome, summary)) => {
+                let report = &outcome.report;
+                let submission_ids: Vec<eg_domain::SubmissionId> =
+                    outcome.submissions.iter().map(|s| s.id).collect();
+                let graded = append_fixture_grades(platform, &submission_ids).unwrap_or(0);
+                lines.push(format!(
+                    "真实 import+persist：文件 {}（成功 {} / 失败 {} / 拒收页 {} / 重复 {}，命名提醒 shown={}）\
+                     → 提交 {} / 页 {} / 资产链接 {} / 审计 {}；补夹具判分 {graded} 条",
+                    fixture_paths.len(),
+                    report.files_ok,
+                    report.files_failed,
+                    report.pages_rejected,
+                    report.duplicates.len(),
+                    report.naming_reminder_shown,
+                    summary.submissions,
+                    summary.pages,
+                    summary.asset_links,
+                    summary.audit_entries
+                ));
+                let enqueued = platform.tasks().enqueue(
+                    eg_platform::NewTask::new(
+                        eg_platform::TaskKind::SubmissionGrade,
+                        serde_json::json!({"kind": "grade", "submissions": submission_ids.len()}),
+                    )
+                    .with_scope(vec!["s1-fixture-grade".to_owned()]),
+                );
+                if let Err(error) = &enqueued {
+                    lines.push(format!("补判分任务失败：{error}"));
+                }
+                let task_rows = load_tasks(platform);
+                lines.push(format!(
+                    "任务队列：{} 条（kind/stage：{}）",
+                    task_rows.len(),
+                    task_rows
+                        .iter()
+                        .map(|row| format!("{}/{}", row.kind, row.stage))
+                        .collect::<Vec<_>>()
+                        .join("，")
+                ));
+                let mut assertions = 0;
+                let mut failures = Vec::new();
+                assertions += 1;
+                if !report.naming_reminder_shown {
+                    failures.push("命名提醒未显示".to_owned());
+                }
+                assertions += 1;
+                if report.files_ok == 0 {
+                    failures.push("没有成功文件".to_owned());
+                }
+                assertions += 1;
+                if report.duplicates.is_empty() {
+                    failures.push("未命中重复字节（夹具应含重复）".to_owned());
+                }
+                if failures.is_empty() {
+                    lines.push(format!("冒烟断言：{assertions}/{assertions} 通过"));
+                } else {
+                    lines.push(format!("冒烟断言失败：{}", failures.join("；")));
+                }
+            }
+            Err(error) => lines.push(format!("真实导入失败（已容错继续）：{error}")),
+        }
     }
     let (ids, rows, counts) = review_queue(platform);
     lines.push(format!("任务/复核队列：{} 条（{counts}）", rows.len()));
@@ -1250,9 +1598,13 @@ pub(crate) fn run_smoke_chain(platform: &Platform) -> String {
             other => lines.push(format!("复核改分：{other:?}")),
         }
     }
+    let mut exported = None;
     match export_report(platform) {
-        Ok(summary) => lines.push(summary),
+        Ok(summary) => {
+            lines.push(summary.clone());
+            exported = Some(summary);
+        }
         Err(error) => lines.push(format!("导出失败：{error}")),
     }
-    lines.join("；")
+    (lines.join("；"), exported)
 }

@@ -490,18 +490,26 @@ fn schedule_smoke(
             eprintln!("[smoke] injected_error=1 first_frame_ms={first_frame_ms:.3}");
         }
         let collected = Arc::new(Mutex::new(Vec::<String>::new()));
-        smoke_pages(
-            ui_handle.as_weak(),
-            Arc::clone(&state),
-            Arc::clone(&metrics),
-            commands.clone(),
-            &PageId::ALL,
-            0,
-            Arc::clone(&collected),
-            strings,
-        );
+        // 等真实导入/复核/导出链路完成（含图片解码），再逐页采集，避免采到链路前快照。
+        let ui_chain = ui_handle.as_weak();
+        let state_chain = Arc::clone(&state);
+        let metrics_chain = Arc::clone(&metrics);
+        let commands_chain = commands.clone();
+        let collected_chain = Arc::clone(&collected);
+        slint::Timer::single_shot(Duration::from_millis(3200), move || {
+            smoke_pages(
+                ui_chain,
+                state_chain,
+                metrics_chain,
+                commands_chain,
+                &PageId::ALL,
+                0,
+                collected_chain,
+                strings,
+            );
+        });
         let ui = ui_handle.as_weak();
-        slint::Timer::single_shot(Duration::from_millis(2300), move || {
+        slint::Timer::single_shot(Duration::from_millis(6200), move || {
             if let Ok(items) = collected.lock() {
                 for item in items.iter() {
                     println!("[smoke] page {item}");
@@ -509,13 +517,14 @@ fn schedule_smoke(
             }
             if let Some(ui) = ui.upgrade() {
                 println!(
-                    "[smoke] error_visible={} error_detail_visible={} page_index={} mode=\"{}\" progress=\"{}\" channel=\"{}\" hint=\"{}\"",
+                    "[smoke] error_visible={} error_detail_visible={} page_index={} mode=\"{}\" progress=\"{}\" channel=\"{}\" image_note=\"{}\" hint=\"{}\"",
                     ui.get_error_visible(),
                     ui.get_error_detail_visible(),
                     ui.get_current_index(),
                     ui.get_mode_label(),
                     ui.get_progress_text(),
                     ui.get_channel_text(),
+                    ui.get_review_image_note(),
                     ui.get_hint()
                 );
                 let _ = strings;
@@ -748,6 +757,8 @@ fn wire_callbacks(
             let page = state.lock().map_or(PageId::Home, |guard| guard.current());
             let command = if page == PageId::Progress {
                 Command::RunPlaceholderJob
+            } else if page == PageId::Report {
+                Command::ExportReport
             } else {
                 Command::PrimaryAction { page }
             };
@@ -1164,6 +1175,7 @@ fn page_action_commands(state: &Arc<Mutex<AppState>>, id: &str) -> Vec<Command> 
                 page: 1,
             }]
         }
+        "report.export" => vec![Command::ExportReport],
         "diagnostics.export" => vec![Command::DiagnosticsExport],
         "diagnostics.open_dir" => vec![Command::OpenDataDir { logs: true }],
         _ => Vec::new(),

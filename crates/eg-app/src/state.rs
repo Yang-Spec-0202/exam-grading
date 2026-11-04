@@ -252,6 +252,10 @@ pub(crate) struct AppState {
     rules: RulesPage,
     consent: ConsentPage,
     diagnostics: DiagnosticsPage,
+    report_last_export: Option<String>,
+    report_stale: bool,
+    report_ever_exported: bool,
+    review_image_note: String,
 }
 
 #[allow(
@@ -293,6 +297,10 @@ impl AppState {
             rules: RulesPage::default(),
             consent: ConsentPage::default(),
             diagnostics: DiagnosticsPage::default(),
+            report_last_export: None,
+            report_stale: false,
+            report_ever_exported: false,
+            review_image_note: String::new(),
         }
     }
 
@@ -566,8 +574,32 @@ impl AppState {
             } => self.review.set_detail(
                 meta, answer, reference, judgement, score_text, reasons, evidence, read_only,
             ),
-            Event::ReviewApplied { notice, advance } => self.review.applied(notice, advance),
-            Event::ReviewUndone { notice } => self.review.undone(notice),
+            Event::ReviewApplied { notice, advance } => {
+                self.review.applied(notice, advance);
+                if self.report_ever_exported {
+                    self.report_stale = true;
+                }
+            }
+            Event::ReviewUndone { notice } => {
+                self.review.undone(notice);
+                if self.report_ever_exported {
+                    self.report_stale = true;
+                }
+            }
+            Event::ReviewImage { path } => {
+                self.review_image_note = path;
+            }
+            Event::ReportExported { summary } => {
+                self.review.exported();
+                self.report_ever_exported = true;
+                self.report_stale = false;
+                self.report_last_export = Some(summary.clone());
+                self.push_toast(
+                    NoticeLevel::Info,
+                    strings.notice_info_title.to_owned(),
+                    summary,
+                );
+            }
             Event::ReviewSamplingPrompt { message } => self.review.show_sampling(message),
             Event::ReviewNotice { message } => self.review.notice(message),
             Event::RulesDraft {
@@ -756,6 +788,7 @@ impl AppState {
 
     /// 当前页动作列表。
     fn page_actions(&self) -> Vec<crate::pages::ActionVm> {
+        let strings = crate::i18n::strings();
         match self.current {
             PageId::Import => self.import.actions(),
             PageId::Progress => self.progress_page.view().actions,
@@ -764,7 +797,12 @@ impl AppState {
             PageId::Rules => self.rules.view().actions,
             PageId::Consent => self.consent.view().actions,
             PageId::Diagnostics => self.diagnostics.view().actions,
-            PageId::Home | PageId::Papers | PageId::Report => Vec::new(),
+            PageId::Report => vec![crate::pages::ActionVm {
+                id: "report.export".to_owned(),
+                label: strings.action_export_report.to_owned(),
+                enabled: true,
+            }],
+            PageId::Home | PageId::Papers => Vec::new(),
         }
     }
 
@@ -926,6 +964,18 @@ impl AppState {
                     "{}\n{}\n{}{}",
                     view.empty_hint, rows, view.exhausted_hint, view.notice
                 )
+            }
+            PageId::Report => {
+                let export = self
+                    .report_last_export
+                    .clone()
+                    .unwrap_or_else(|| strings.report_never_exported.to_owned());
+                let stale = if self.report_stale {
+                    strings.report_stale.to_owned()
+                } else {
+                    String::new()
+                };
+                format!("{export}\n{stale}")
             }
             PageId::Diagnostics => {
                 let view = self.diagnostics.view();
@@ -1229,6 +1279,37 @@ mod tests {
         assert_eq!(state.request_mode_toggle(), ModeRequest::NeedsConfirm);
         assert!(state.dismiss_top());
         assert!(state.confirm().is_none());
+    }
+
+    #[test]
+    fn report_page_tracks_export_and_stale_after_review_edit() {
+        let mut state = standard_state();
+        state.navigate_to(PageId::Report);
+        let before = state.view(strings()).page_body;
+        assert!(before.contains("尚未导出"), "未导出时给引导：{before}");
+        state.apply_event(Event::ReportExported {
+            summary: "报表已导出到 /tmp/x（10 个文件）".to_owned(),
+        });
+        let exported = state.view(strings()).page_body;
+        assert!(exported.contains("已导出"));
+        assert!(!exported.contains("重新导出"));
+        // 导出后的复核修改 → 报表页提示重新导出。
+        state.apply_event(Event::ReviewApplied {
+            notice: "已改分".to_owned(),
+            advance: false,
+        });
+        let exported_stale = state.view(strings()).page_body;
+        assert!(
+            exported_stale.contains("重新导出"),
+            "导出后修改必须提示：{exported_stale}"
+        );
+        // 重新导出后复位。
+        state.apply_event(Event::ReportExported {
+            summary: "报表已导出（第二版）".to_owned(),
+        });
+        let refreshed = state.view(strings()).page_body;
+        assert!(!refreshed.contains("重新导出"));
+        assert!(refreshed.contains("第二版"));
     }
 
     #[test]

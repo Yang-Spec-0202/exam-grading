@@ -256,6 +256,109 @@ EXAM_GRADING_DATA_DIR=/tmp/eg-app-final-smoke ./target/release/eg-app --smoke
 5) 单题重判 `RegradeEngine` 真实装配（当前显式失败，需 grade 流水线）；
 6) 人工验收：20 题键盘 E2E、中文 IME §7.1（TCC 阻塞）、缩放/HiDPI。
 
+### 8.7 S1 UI 端到端冒烟与集成收尾（2026-11-04，task-50）
+
+**本轮集成**
+
+| 项 | 状态 |
+|---|---|
+| 导入真实落库 | 已改：`PlatformAssetSink`（capture `AssetSink` → `AssetStore::put`，资产文件+行同写）→ `eg_capture::persist` 同事务写 Submission/Page/审计；导入时先建 `TaskQueue` 任务并 `persist(task_id)` 推进到预处理阶段；失败/部分成功/命名提醒逻辑不变。**真实路径依赖已存在的试卷**（platform 暂无 `list_papers`，`import_context` 用行查询兼容 shim，待平台补 API）；`fixtures/paper-20q` 未就绪时冒烟走内置夹具并显式记录 |
+| 报表导出联动 | `Command::ExportReport`（报表页主操作/动作按钮）→ `Report::build + export + insert_export_record` → `Event::ReportExported`：清 `review.export_stale`、报表页显示导出摘要；复核改分/撤销后若曾导出则报表页显示「导出后已有新的复核修改，请重新导出」；`state::tests::report_page_tracks_export_and_stale_after_review_edit` 覆盖跳出/复位 |
+| 图像证据懒加载 | `Event::ReviewImage`（platform 资产路径）→ UI 线程 `slint::Image::load_from_path`；失败写 `review-image-note` 显式提示；复核页改三栏最小布局（左：队列；中：图像 + 证据提示；右：改分/原因/抽检/动作） |
+| 重判 | 未接真实 `RegradeEngine`（需 grade 流水线 + subject/inference 装配）；保持显式失败「单题重判需要 grade 流水线装配」，原判定保留（TODO） |
+| redo | 仍进程内（platform 无 redo 表；undo 已持久化）；如实记录 TODO |
+
+**S1 冒烟（可复现）**
+
+```bash
+cargo build -p eg-app --release
+rm -rf /tmp/eg-app-s1
+EXAM_GRADING_DATA_DIR=/tmp/eg-app-s1 ./target/release/eg-app --smoke
+```
+
+实测（2026-11-04，macOS / M4；`first_frame=423.2ms`）：
+
+```
+[smoke-chain] 基础夹具：3 提交 × 1 题已写入 platform；fixtures/paper-20q 未就绪：使用内置夹具…；
+              任务/复核队列：3 条（标准 3 · 抽检 0 · 合计 3（platform 队列））；
+              复核改分：命令已执行：override；报表已导出到 .../exports（10 个文件，43 行）
+[smoke] page report: 报表已导出到 .../exports（10 个文件，43 行）
+[smoke] ... image_note=""（证据图像加载成功）
+[eg-app] exit: command_rejected=0 event_merged=0 event_dropped=0 critical_dropped=0
+```
+
+链路：内置/夹具数据落库 → 任务队列（待运行 1）→ platform 复核队列 3 条 → override 改分（审计+修订）→ 报表导出（xlsx+html+8 CSV，43 行）→ 报表页显示导出摘要；图像证据 1×1 PNG 懒加载成功（无失败提示）。
+`fixtures/paper-20q` 未就绪时容错：若目录存在图片（`submissions/`、`images/` 或目录下 jpg/png/pdf），自动走真实 `import+persist` 并为导入提交补夹具判分记录再入队；否则用内置夹具（本次实测即此分支）。
+
+**门禁（本轮实测）**
+
+- `cargo test -p eg-app`：68 passed / 0 failed（新增报表 stale 用例）；
+- `cargo clippy -p eg-app --all-targets -- -D warnings`：0 errors；
+- `cargo fmt -p eg-app -- --check`：通过；
+- `cargo build -p eg-app --release`：通过；`--smoke` 退出码 0。
+
+**剩余 TODO**
+
+1) `fixtures/paper-20q` 就绪后复跑真实 import+persist 分支并核对 20 题夹具的队列/导出统计；
+2) platform 补 `list_papers` 后移除 `import_context` 行查询 shim，并在导入页加试卷/班级选择；
+3) RegradeEngine 真实装配（eg-review + eg-grade：幂等键、失败保留原判）；
+4) redo 持久化（platform 增加 redo 表或复用 undo 反向记录）；
+5) 人工验收：20 题键盘 E2E、中文 IME §7.1（TCC 阻塞）、窗口缩放/HiDPI。
+
+### 8.8 外部夹具 `fixtures/paper-20q` 真实导入冒烟（2026-11-04，task-54）
+
+**夹具与命令**
+
+- 试卷/班级/名单：`fixtures/paper-20q/{paper,classroom,students}.json`（20 题、3 学生；与 eg-domain 类型直接反序列化后落 platform）；
+- 图片：`fixtures/images/`（9 个文件：张三 p1/p2、李四 p1/p2、SO2026-003 p1/p2、`IMG_20261104_001.jpg` 不规范命名、`王五_exif6.jpg` EXIF、`张三_p2-copy.png` 与 `张三_p2.png` 同字节重复）；
+- 命令：`EXAM_GRADING_DATA_DIR=/tmp/eg-app-s1fix target/release/eg-app --smoke`。
+
+**实测结果（数据根 `/tmp/eg-app-s1fix`，本机 macOS/M4，首发 160.1ms）**
+
+```
+[smoke-chain] 基础夹具：fixtures/paper-20q 试卷（20 题 / 3 学生）；
+              真实 import+persist：文件 9（成功 9 / 失败 0 / 拒收页 0 / 重复 1，命名提醒 shown=true）
+              → 提交 8 / 页 8 / 资产链接 32 / 审计 17；补夹具判分 8 条；
+              任务队列：2 条（submission_grade/Grade，submission_grade/）；
+              冒烟断言：3/3 通过；
+              任务/复核队列：8 条（标准 8 · 抽检 0 · 合计 8（platform 队列））；
+              复核改分：命令已执行：override；
+              报表已导出到 /tmp/eg-app-s1fix/exports（10 个文件，59 行）
+[smoke] page progress: 运行中 0 / 待运行 1 / 失败 0
+[smoke] page review: 标准 8 · 抽检 0 · 合计 8（platform 队列）
+[smoke] page report: 报表已导出到 /tmp/eg-app-s1fix/exports（10 个文件，59 行）
+[smoke] image_note=""（图像证据加载成功）
+```
+
+`--smoke --demo-error`（数据根 `/tmp/eg-app-s1err`）：`injected_error=1`、`error_visible=true`、`error_detail_visible=false`，复核队列同为 8 条。
+
+**断言（冒烟内嵌 3/3 通过 + 人工核对）**
+
+| 断言 | 实测 |
+|---|---|
+| 命名提醒仅一次 | `report.naming_reminder_shown=true`（一次导入批次内只提示一次） |
+| 导入成功/失败/重复明细 | 成功 9 / 失败 0 / 拒收页 0 / 同批重复 1（`张三_p2-copy.png` 命中去重，不重复建页） |
+| 真实落库 | 提交 8 / 页 8 / 资产链接 32 / 审计 17（`eg_capture::persist` 单事务） |
+| 任务队列推进 | 导入任务 enqueue→claim→`persist(task_id)` 推进到预处理→complete；另入队 1 条待判分任务（进度页「待运行 1」） |
+| 复核队列条数 | platform 队列 8 条（标准 8） |
+| 错误呈现 | `--demo-error` 下 `error_visible=true`、详情默认折叠、无崩溃 |
+| 导出 | XLSX+HTML+8 CSV，10 文件，59 行（8 提交 × 20 题口径下按有判分记录的题统计） |
+
+**本轮修复的 app 侧缺陷**
+
+1. **夹具图片目录**：真实分支原只查 `fixtures/paper-20q/**`，实际图片在 `fixtures/images/`；候选目录已加 `fixtures/images`。
+2. **夹具试卷来源**：冒烟原先落内置 3 提交夹具，现改为优先读取 `fixtures/paper-20q` 的 classroom/paper/students（20 题/3 学生），失败才回退内置。
+3. **任务阶段推进非法**：platform `advance_stage` 仅接受 running；capture persist 会直接推进 pending 任务导致 `任务状态迁移非法：pending -> stage`（业务数据已提交但报错）。修复：导入前 `enqueue` → `claim` 校验拿到自己刚入队的 id → `persist(task_id)` → `complete`；claim 不到则不传 task_id（不阻塞导入）。
+4. **冒烟时序**：链路（9 张 2480×3507 图解码 + persist + 导出）未完成时就逐页采集，导致复核页采到 0 条；`--smoke` 增加 3.2s 链路等待屏障 + 6.2s 总结采集。
+5. **任务幂等键**：`NewTask` 幂等键不含 payload，补的待判分任务与导入任务同 kind/scope 会被去重成 1 条；改为 `.with_scope(["s1-fixture-grade"])` 后任务队列 2 条。
+
+**已知限制（如实记录）**
+
+1. **多页归组未接**：capture 当前一文件一提交，9 文件 → 8 提交（重复文件去重）；同学生 p1/p2 尚未合并为一个提交，待 align/tech-spike 多页归组接口就绪后复跑。
+2. **身份/名单匹配未接**：`IMG_20261104_001.jpg`（不规范命名）与名单外文件按文件成功导入，学号匹配属 align 阶段，本轮不做判定；EXIF 旋转只由 capture 质量/方向处理，未接 OCR/align 验证。
+3. 补判分记录为夹具（`append_fixture_grades`，原因 `LowConfidence`），用于驱动复核/导出链路；真实判分流水线未接。
+4. 报表 59 行与 20 题口径的差异来自当前仅有题 1 的判分记录（夹具判分统一挂首题），非统计缺陷，真实判分后复测。
+
 ## 9. 复现命令
 
 ```bash

@@ -22,6 +22,7 @@ export struct PageLabels {
     setting-key-hint: string,
     setting-value-hint: string,
     review-score: string,
+    review-image: string,
     image-evidence: string,
     sampling-title: string,
     sampling-single: string,
@@ -103,6 +104,9 @@ export component AppWindow inherits Window {
     in-out property <string> consent-budget;
     in-out property <string> consent-ttl;
     in property <bool> sampling-visible;
+    in property <image> review-image;
+    in property <string> review-image-note;
+    in property <string> review-queue-text;
     in property <[string]> review-reasons;
     in property <PageLabels> page-labels;
     in property <string> about-title;
@@ -406,29 +410,56 @@ export component AppWindow inherits Window {
                             clicked => { root.apply-setting(root.setting-key, root.setting-value); }
                         }
                     }
-                    // 复核页：改分输入 + 原因 + 抽检范围
-                    if (root.review-page) : VerticalLayout {
-                        spacing: 6px;
-                        HorizontalLayout {
-                            spacing: 6px;
-                            Text { text: root.page-labels.review-score; vertical-alignment: center; }
-                            LineEdit {
-                                text <=> root.review-score;
-                                width: 120px;
-                                edited(text) => { root.review-score-changed(text); }
+                    // 复核页：三栏最小布局（队列 / 图像证据 / 判定与操作）
+                    if (root.review-page) : HorizontalLayout {
+                        spacing: 10px;
+                        Rectangle {
+                            width: 260px;
+                            background: #f8f9fb;
+                            border-radius: 6px;
+                            VerticalLayout {
+                                padding: 8px;
+                                spacing: 6px;
+                                Text { text: root.review-queue-text; font-weight: 600; }
+                                Text { text: root.page.body; wrap: word-wrap; font-size: 11px; color: #4a4a4a; }
                             }
-                            ComboBox {
-                                model: root.review-reasons;
-                                current-index: 0;
-                                selected(value) => { root.review-reason-changed(value); }
-                            }
-                            Text { text: root.page-labels.image-evidence; color: #6b6b6b; font-size: 11px; }
                         }
-                        if (root.sampling-visible) : HorizontalLayout {
+                        Rectangle {
+                            width: 380px;
+                            background: #ffffff;
+                            border-width: 1px;
+                            border-color: #e6e6ea;
+                            VerticalLayout {
+                                padding: 8px;
+                                spacing: 6px;
+                                Text { text: root.page-labels.review-image; font-weight: 600; }
+                                Image { source: root.review-image; image-fit: contain; height: 320px; }
+                                Text { text: root.review-image-note; wrap: word-wrap; font-size: 11px; color: #8a1f11; }
+                            }
+                        }
+                        VerticalLayout {
                             spacing: 6px;
-                            Text { text: root.page-labels.sampling-title; vertical-alignment: center; }
-                            Button { text: root.page-labels.sampling-single; clicked => { root.sampling-scope("single"); } }
-                            Button { text: root.page-labels.sampling-whole; clicked => { root.sampling-scope("paper"); } }
+                            HorizontalLayout {
+                                spacing: 6px;
+                                Text { text: root.page-labels.review-score; vertical-alignment: center; }
+                                LineEdit {
+                                    text <=> root.review-score;
+                                    width: 120px;
+                                    edited(text) => { root.review-score-changed(text); }
+                                }
+                                ComboBox {
+                                    model: root.review-reasons;
+                                    current-index: 0;
+                                    selected(value) => { root.review-reason-changed(value); }
+                                }
+                            }
+                            if (root.sampling-visible) : HorizontalLayout {
+                                spacing: 6px;
+                                Text { text: root.page-labels.sampling-title; vertical-alignment: center; }
+                                Button { text: root.page-labels.sampling-single; clicked => { root.sampling-scope("single"); } }
+                                Button { text: root.page-labels.sampling-whole; clicked => { root.sampling-scope("paper"); } }
+                            }
+                            Text { text: root.page-labels.image-evidence; color: #6b6b6b; font-size: 11px; wrap: word-wrap; }
                         }
                     }
                     // 规则页：手写直译草稿输入

@@ -1,8 +1,8 @@
 # 研究记录：采集与预处理（capture / T21–T22）
 
-> 状态：已完成（T21–T22 + D1 落库已批准并落地；DOCX 参考答案、HEIC、并发未实现，见 §7）· 2026-11-02（Asia/Shanghai）· 对应规范：`SPEC-capture.md` v0.2.1、`CONFIG.md` §2（`import.*`）、`SPEC-domain.md`（`Page`/`PageQuality`/`AssetId`）、`SPEC-platform.md`（资产库/仓储/审计）
+> 状态：已完成（T21–T22 + D1 落库 + T52 多页归组；DOCX 参考答案、HEIC、并发未实现，见 §7）· 2026-11-04（Asia/Shanghai）· 对应规范：`SPEC-capture.md` v0.2.1、`CONFIG.md` §2（`import.*`）、`SPEC-domain.md`（`Page`/`PageQuality`/`AssetId`）、`SPEC-platform.md`（资产库/仓储/审计）
 > 实测机器：Apple M4 / 16 GB / macOS 27.0.1（26A434）/ rustc 1.99.1
-> 代码：`crates/eg-capture/`（17 个模块 + 1 个基准示例 + 4 组测试）；关联研究：`pdf.md`（hayro/透明底）、`deps.md`（image/exif）、`inference-serving.md`（白底与 OCR 有效分辨率）
+> 代码：`crates/eg-capture/`（18 个模块 + 1 个基准示例 + 5 组测试）；关联研究：`pdf.md`（hayro/透明底）、`deps.md`（image/exif）、`inference-serving.md`（白底与 OCR 有效分辨率）、`align.md`（文件名身份；归组与之同语义）
 
 ## 1. 模块与范围
 
@@ -10,6 +10,7 @@
 - 本次实现（T21）：格式白名单 + 文件头校验、文件名元数据无损、BLAKE3 内容寻址去重（先落盘后建档）、PDF 逐页栅格化（DPI 取配置）、多页/部分成功、导入事件与报告、取消检查点。
 - 本次实现（T22）：EXIF 方向（含镜像）与旋转记录、页面轮廓检测 + 单应矫正（保守实现，失败回退）、白底合成、派生图（方向校正/透视矫正/二值/缩略图）、质量门控（模糊/曝光/高光/死黑/倾斜/分辨率/行结构）、拒收原因码、流水线版本 + 选项哈希。
 - 本次实现（D1，负责人已批准）：`src/persist.rs` —— 一次导入批次的 `Submission`/`Page`/`asset_link`/`audit_log` 在**单个 `platform::db.write` 事务**内落库；失败整体回滚；提交成功后把任务阶段推进到 `Preprocess`。
+- 本次实现（T52，S1 阻塞项）：`src/group.rs` + 导入批处理重构 —— 按 `source_stem` 去页码后缀 + 归一化（与 `eg-align` 同语义）归组，同目录同 stem 的多文件 → **1 个 `Submission` 多 `Page`**（页序按 `_p1/_p2/p1/page1/_2/第N页` 后缀）；页序不可判定时按文件名自然序并记 warning；缺页显式 `warning` 且提交 `Failed{Capture}`；同 stem 不同目录**不合并**并提示；逐字节重复仍走批内去重。报告新增 `groups`/`group_warnings`/`SubmissionSummary.page_order`，审计记录组信息（页序/文件数/来源指纹，不含姓名/路径原文）。
 - 明确不做：OCR/版面结构化（`recognize`）、身份匹配（`align`）、`platform` 的资产库/仓储实现（并行任务）、DOCX 参考答案（后续里程碑）、HEIC 解码（需 Ask first 新增依赖）、真机照片调参（用户无样本）。
 
 ## 2. 问题清单
@@ -26,6 +27,7 @@
 | Q8 | 性能是否满足 `SPEC-capture.md` §8 C6（1200 万像素 P50 ≤1.2s；300 DPI A4 ≤1.5s/页）？ | 验收 |
 | Q9 | 30 页金标集（C4：漏放 ≤5%、误杀 ≤10%）能否满足？ | 门控质量 |
 | Q10 | D1 落库：`eg-platform` 事务内 API（谁写 `page`？审计链怎么延伸？任务阶段何时推进？）与回滚/重试语义？ | 建档正确性与可审计性 |
+| Q11 | 真实使用是「一名学生多页文件」，规范/旧实现却是「一文件一提交」：如何归组、页序、缺页与跨目录同名怎么办？ | S1 端到端 expected 接入 |
 
 ## 3. 来源
 
@@ -44,6 +46,8 @@
 | S11 | `docs/dev/research/pdf.md`、`deps.md`、`inference-serving.md`（本仓库） | 2026-11-02（T02） | 先前研究记录 | hayro 透明背景、image/exif 版本、白底与 OCR 有效分辨率 |
 | S12 | 本机 `crates/eg-platform/src/{repo,audit,tasks}.rs` + `migrations/0001_initial.sql` | 0.1.0，2026-11-02 | 上游源码（分工前实现） | `repo::insert_submission` **内含**全部 `page` 写入；`repo::link_asset(tx,owner_type,owner_id,role,asset,created_at)`（PK=`owner_type+owner_id+role`，重复即报错）；`AuditLog::append_in_tx(tx,id,at,&NewAuditEntry)`（actor 由模块常量固定、链在本事务内延伸）；`Database::write<T,F>`（单写线程 + 单事务 + commit）；`TaskQueue::advance_stage` 只允许 `state='running'` |
 | S13 | 本机实测（`cargo test -p eg-capture --test persist`） | 2026-11-02 | 命令输出 | 9 个真实 platform 落库用例全绿（见 §5） |
+| S14 | 仓库级端到端夹具 `fixtures/paper-20q`（任务 T49） | 2026-11-04 | 仓库夹具 | 3 名学生 × 2 页（`张三_p1/p2`、`李四_期中_p1/p2`、`SO2026-003_p1/p2`）+ 副本/EXIF/相机名样例；归组测试直接消费其图片字节 |
+| S15 | 本机 `crates/eg-align/src/normalize.rs`（任务 T34） | 0.1.0 | 上游源码 | `page_suffix`/`normalize_key` 语义；`group.rs` 同语义拷贝 + dev 依赖逐项比对（防漂移） |
 
 ## 4. 结论
 
@@ -59,6 +63,17 @@
 | Q8 | release 基准（`examples/capture_bench.rs`）：**1200 万像素 JPEG 单页预处理 P50 = 0.344s、P95 = 0.354s**（n=5，含解码/方向/矫正/4 张派生/质量/内存资产写入）→ C6 要求 P50 ≤1.2s、P95 ≤2.5s，**大幅达标**；**300 DPI A4 PDF = 0.204s/页**（3 页 0.611s）→ C6 要求 ≤1.5s/页，达标。 | S10 |
 | Q9 | 30 页构造金标集（10 良 + 5 模糊 + 5 欠曝 + 5 倾斜 10° + 5 低分辨率，每页内容唯一避免被批内去重折叠）：**漏放 0/30（0%）、误杀 0/30（0%）**，拒收页 20、原因计数含 `blur`/`resolution` 等 → 满足 C4（≤5% / ≤10%）。注意这是**合成夹具**，真实照片需在 M4 用真实语料复标（用户当前无样本）。 | S1 + S10 |
 | Q10 | D1 落库按「资产先行、业务单事务」落地（`src/persist.rs::persist`）：① 事务前校验全部 `AssetId` 已在 platform 资产库（`AssetStore::exists`），缺失即 `persist_failed` 且零行写入；② **一个** `db.write` 内按「提交（`repo::insert_submission` 会一并写全部 `page`，**不要再单独插 page**）→ `asset_link`（页面 `original` + `derived_<i>`；参考答案 `key_page_asset`）→ 审计（批次 1 条 + 每提交/每页/每参考答案资产各 1 条，`append_in_tx` 让审计链在本事务内延伸）」顺序写入，任一步失败整体回滚；③ 审计备注不含文件名/学号/姓名（可能含学生身份），批次审计 `after_hash = 选项哈希`、页面审计 `after_hash = 质量结论`；④ 提交成功后才 `advance_stage(task, Preprocess)`，该步失败返回显式错误且**数据已提交**（错误文案提示不要重试落库）；⑤ 事务失败可整体重试（回滚干净），重试撞主键会再报 `persist_failed` 而不是半份数据。实测 9 用例：正常 2 提交/多页读回一致 + 审计链完整；40 同字节→1 提交；被拒页保留 `Rejected` 且提交 `Failed{Capture}`；部分成功只落好文件；「第二份冲突」时第一份整体回滚（无 page/asset_link/audit 残留）；缺资产零行；任务阶段成功/任务未 claim 时显式失败；参考答案 `key_page_asset` 链接数量正确。 | S12 + S13 |
+| Q11 | 归组规则落地（`src/group.rs`，T52）：① 组键 = `page_suffix(stem).0` 按 `align` 同语义归一（全半角/大小写/分隔符）+ **来源目录哈希**（不同目录同名不合并，避免把不同学生并成一份）；② 页序 = 组内页码后缀唯一时升序，否则文件名自然序稳定排序 + `page_order_fallback`；③ 缺页 = 可判定页序时缺 1..max → `missing_page_range` warning 且提交 `Failed{Capture}`（单文件 `_p2` 也报缺第 1 页）；④ 重复页码 → `duplicate_page_number` + 自然序；⑤ 基名拼写不一致（「张 三」/「张三」）合并但 `inconsistent_stems`；⑥ 批内同字节仍在读入阶段去重（保持「同字节只处理一次」），跨组同字节带页码文件额外报 `cross_group_duplicate_bytes`；⑦ 合并后页号重编号为 1..N，`Submission.source_stem` 用**组主 stem**、`source_file_name` 用组内首页文件（身份/对齐口径与 align 一致）。实测：仓库夹具 3 学生×2 页 → 3 提交×2 页且页序正确（p1 资产在第 1 页）；副本逐字节重复 → 仍 1 提交 2 页；`_p1+_p3` → 缺第 2 页 + Failed；单 `_p2` → 缺第 1 页；同 stem 两目录 → 2 组 + 2 warning；40 文件（20 学生×2 页）→ 20 提交×2 页；单文件仍单页；与 `eg_align::{page_suffix,normalize_key}` 逐项一致（dev 依赖仅在测试用）。 | S1 + S10 + `align.md` |
+
+
+### 4.1 多页归组的对外接口（app / align / persist）
+
+| 消费者 | 约定 |
+|---|---|
+| `app` | 一次 `Importer::run` 的 `ImportReport` 新增 `groups: Vec<GroupSummary>` 与 `group_warnings: Vec<GroupWarning>`：每个组给出 `submission_id`、`page_count`、`file_count`、`page_order`、`suffix_pages`、`missing_pages`、`warnings`、`file_fingerprints`（均脱敏）。`SubmissionSummary` 增加 `group_key/file_count/page_order`，可用于「导入结果按组展示 + 部分成功明细」；`partial_success` 现在也把归组/缺页 warning 计入。事件仍是每文件 `FileStarted/FileFinished`（组内共享同一 `submission_id`；被去重/被跳过文件 `page_count=0`）。 |
+| `align` | 无需改动：`Submission.source_stem` 记**组主 stem**（去页码后缀），页号连续 1..N，`source_file_name` 为组内首页文件；文件名身份（`文件名优先=1.000`）与未命中未决语义不变。不同目录同名被判为不同组（保守，需教师确认），align 侧仍按各自 `source_stem` 匹配；若两组同名同学生，align 会各自出结论，需人工合并/排除（记录 R11）。 |
+| `persist` | 一次批次可写多提交、每提交多页（原事务模型不变）；审计在批次备注记录 `组/缺页组/归组警告` 数，在提交备注记录 `页数/页序/文件数/来源指纹（哈希+扩展名）/缺页`，不含姓名或文件名原文（`persist.rs` 单测断言 `note` 不含 `张三`/`.png`）。 |
+| 规范 | 归组规则见 Q11；与旧「单文件=单提交」口径的偏差记 D6（待负责人确认规范更新）。 |
 
 ## 5. 版本实测
 
@@ -71,7 +86,7 @@
 | `eg-platform` 事务内落库 API | 0.1.0 | `cargo test -p eg-capture --test persist` | `db.write` + `repo::insert_submission`（含 page）/`repo::link_asset`/`audit::append_in_tx`/`tasks::advance_stage` 在真实 SQLite 上按 D1 语义工作；约束冲突回滚干净 |
 | `eg-domain` | 0.1.0 | 全测试 | `Page`/`PageQuality`/`QualityVerdict`/`Rotation`/`ExifOrientation`/`AssetId` 校验通过 |
 | `serde` / `serde_json` / `thiserror` | 1.0.229 / 1.0.154 / 2.0.21 | 全测试 | 事件与报告可序列化（脱敏断言用 JSON 序列化扫描） |
-| 测试规模 | **73 个测试**：lib 47 + import 14 + persist 9 + platform_bridge 3 | `cargo test -p eg-capture` | 全绿；debug 全量约 4 分钟（30 页金标集 + 真实 platform 落库各占一部分） |
+| 测试规模 | **93 个测试**：lib 56 + import 14 + persist 10 + platform_bridge 3 + grouping 10 | `cargo test -p eg-capture` | 全绿；debug 全量约 6 分钟（30 页金标集、真实 platform 落库、仓库夹具 2480×3507 归组各占一部分） |
 | 静态检查 | clippy / fmt | `cargo clippy -p eg-capture --all-targets -- -D warnings`、`cargo fmt -p eg-capture -- --check` | 均 0 输出（通过） |
 | 性能基准 | release | `cargo run -p eg-capture --release --example capture_bench` | 12MP JPEG P50 0.344s / P95 0.354s；A4@300DPI 0.204s/页 |
 
@@ -89,6 +104,8 @@
 | **R8：`Page.derived` 的语义角色不落库** | `asset_link.role` 只能记 `original` + `derived_<i>`；`Page.derived` 是压缩后定序列表（缺项跳过），单看链接无法断言 `derived_0` 一定是方向校正图 | 读方按 `Page.derived` 列表顺序 + `SPEC-domain.md` §6 定序规则解释；如需严格角色，需在 capture 侧保留角色位（改契约，走审批） |
 | **R9：debug 测试较慢**（30 页金标集约 2.5 分钟 + 真实 platform 落库约 25 秒） | CI 时间上升 | 门禁跑 debug 全量；性能验收用 release 基准（`capture_bench`）；必要时把金标集拆为 `--release` 专项任务 |
 | R10：`hayro` 0.x API 可能变动 | 升级破坏编译 | `Cargo.toml` 固定 `hayro = "0.8"`；升级前跑 PDF/白底/页序用例 |
+| **R11：归组的页序/归属是启发式** | 没有页码后缀的同 stem 多文件只能按文件名自然序（`page_order_fallback`）；不同目录同名被判为不同组（保守，可能把同一学生的跨目录文件拆开）；跨组同字节带页码文件会因批内去重少一页 | warning 全部进 `report.group_warnings`（教师可见），缺页提交强制 `Failed{Capture}`；不同目录同名提示教师手工确认/改为同目录；跨组同字节只对「带页码」文件告警（无页码的副本无法判定归属，避免误报） |
+| **R12：归组依赖文件命名规范** | 教师命名混乱（`张三 1`/`张三2` 无 `p`/`_` 标记）时归组退化 | 回退为按文件名自然序并 warning；`import.remind_naming` 在选文件时提示；不擅自改名/猜归属 |
 
 ## 7. 与规范的偏差
 
@@ -99,6 +116,8 @@
 | **D3**：`SPEC-capture.md` §3.2「DOCX 参考答案（段落 + 表格纯文本）」 | 未实现，返回显式 `not_implemented` | 后续里程碑实现（M5 前）；当前错误码可被 UI 识别 | 任务已标注「后续」 |
 | **D4**：`CONFIG.md` `import.parallelism = 4` | 未用于并发（串行） | 实现细节；串行已达标 C6；并发调优留 M4 | — |
 | **D5**：`SPEC-capture.md` §3.3「倾斜夹具顶点误差 ≤2px」 | 仅合成夹具验证（旋转纸检测 + A4 纵横比）；真实照片未验证 | 与 R1 同；M4 真机复标 | — |
+| **D6**：`SPEC-capture.md` §3.1/§3.4 旧口径「单文件=单提交」 | T52 改为「同目录同 stem（去页后缀）多文件 → 1 提交多页」；`source_stem` 记组主 stem，页号重编号 1..N | 真实使用（S1 夹具/教师一次选多页）要求如此；建议规范把「多页归组」写入 §3.1/§3.4（组键、页序、缺页、跨目录同名规则见 Q11） | **待负责人确认规范更新** |
+| **D7**：`SPEC-align.md` §3.2 文件名归一与 `capture` 归组归一重复实现 | `src/group.rs` 拷贝 `page_suffix`/`normalize_key`（capture 是上游，不能反向依赖 align；跨 crate 抽公共模块需改 domain/规范） | 用 dev 依赖测试逐项比对两实现（`normalization_and_page_suffix_match_eg_align`），防语义漂移；建议后续把归一移入 `eg-domain` 的共享模块（Ask first） | 待确认（不阻塞） |
 | `SPEC-capture.md` §2「导入选项：重排页序 / 目标提交追加」 | 页序重排与「追加到既有提交」未实现（`target_submission` 字段未纳入请求） | 属 app 交互侧 + M3 追加页功能；当前按文件自然序、不支持追加 | — |
 
 ## 8. 复现命令
@@ -110,10 +129,11 @@ cd <repo>
 # 1) 依赖版本（Cargo.lock 实测）
 cargo tree -p eg-capture --depth 1      # hayro 0.8.0 / image 0.25.10 / kamadak-exif 0.6.1 / eg-platform 0.1.0 …
 
-# 2) 测试（73 个：接口/门控/PDF/EXIF/白底/去重/部分成功/金标集/真实 platform 资产库/真实落库）
+# 2) 测试（93 个：接口/门控/PDF/EXIF/白底/去重/部分成功/金标集/真实 platform 资产库/真实落库/多页归组）
 cargo test -p eg-capture
 cargo test -p eg-capture --test import           # 14 个集成用例
-cargo test -p eg-capture --test persist          # 9 个真实 platform 落库用例（D1）
+cargo test -p eg-capture --test grouping         # 10 个多页归组用例（含仓库夹具 3×2 页、40 文件批次）
+cargo test -p eg-capture --test persist          # 10 个真实 platform 落库用例（D1 + 多页组审计）
 cargo test -p eg-capture --test platform_bridge  # 3 个真实 platform 资产库用例
 
 # 3) 质量门禁

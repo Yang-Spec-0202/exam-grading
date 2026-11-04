@@ -177,6 +177,8 @@ pub(crate) enum Command {
         /// 进程启动 → 首帧回调毫秒。
         first_frame_ms: u64,
     },
+    /// 报表页：导出当前试卷报表（真实 platform/eg-report）。
+    ExportReport,
     /// 冒烟链路：夹具落库 → 复核改分 → 导出（仅 --smoke）。
     RunSmokeChain,
     /// 退出事件循环。
@@ -425,6 +427,16 @@ pub(crate) enum Event {
         /// 索引状态说明。
         index_note: String,
     },
+    /// 复核图像证据懒加载（platform 资产路径；UI 线程加载失败显式提示）。
+    ReviewImage {
+        /// 资产文件绝对路径。
+        path: String,
+    },
+    /// 报表导出成功（清 stale 并展示路径/行数）。
+    ReportExported {
+        /// 中文摘要。
+        summary: String,
+    },
     /// 诊断包导出结果。
     DiagnosticsExported {
         /// 摘要（成功/失败均用）。
@@ -444,7 +456,9 @@ impl Event {
             Self::PageSnapshot { page, .. } => Some(MergeKey::Snapshot(*page)),
             Self::TaskFailed { .. } | Self::ModeChanged { .. } | Self::Notice { .. } => None,
             Self::ImportProgress { .. } => Some(MergeKey::Import),
-            Self::ImportFinished { .. }
+            Self::ReviewImage { .. } => Some(MergeKey::Image),
+            Self::ReportExported { .. }
+            | Self::ImportFinished { .. }
             | Self::ImportFailed { .. }
             | Self::QueueTasks { .. }
             | Self::SettingsLoaded { .. }
@@ -480,6 +494,7 @@ impl Event {
             | Self::RulesFailed { .. }
             | Self::ConsentFailed { .. }
             | Self::DiagnosticsExported { .. } => true,
+            Self::ReportExported { .. } => false,
             Self::Progress { .. }
             | Self::BackendHealth { .. }
             | Self::QueueStats { .. }
@@ -503,7 +518,8 @@ impl Event {
             | Self::ConsentRows { .. }
             | Self::ConsentRegistered { .. }
             | Self::ConsentRevoked { .. }
-            | Self::LogRows { .. } => false,
+            | Self::LogRows { .. }
+            | Self::ReviewImage { .. } => false,
         }
     }
 }
@@ -519,6 +535,8 @@ pub(crate) enum MergeKey {
     Queue,
     /// 最新导入进度。
     Import,
+    /// 最新复核图像。
+    Image,
     /// 某页的最新快照。
     Snapshot(PageId),
     /// 最新日志分页。

@@ -1,9 +1,60 @@
 # Task List：exam-grading 实现任务
 
-> 版本：v0.1 · 2026-11-02 · 状态：待审批
+> 版本：v0.2 · 2026-11-05 · 状态：执行中（T01–T41 逐项状态见下方「状态总览」；S1 backend 自动化已 PASS）
 > 规范基线：`SPEC.md` v0.2.1 + 12 份模块规范 + `CONFIG.md` + `AGENTS.md`
 > 规则：每个任务先写 `docs/dev/research/<module>.md`（研究记录）再写代码；任务完成必须通过该任务的「验证」；每 3–4 个任务一个检查点（见 `tasks/plan.md` §6）。
 > 规模：S=1–2 文件，M=3–5 文件；所有任务均须 ≤5 文件、单次会话可完成。
+
+## 状态总览（2026-11-05，滚动快照）
+
+> 标记：✅ 完成（验收项已满足并有证据）· 🟡 部分完成（主路径可用，存在明确 TODO）· ⬜ 未开始。
+> 状态不等同于 M10 验收通过；S1 backend 之外的真实数据/人工项见 T41 与 `docs/dev/acceptance.md`。
+
+| 任务 | 状态 | 证据（一行） |
+|---|---|---|
+| T01 | ✅ | `cargo build --workspace`；`rust-toolchain.toml`/`Cargo.toml` |
+| T02 | ✅ | `docs/dev/research/{deps,toolchain,slint,models,pdf}.md` 版本实测 |
+| T03 | ✅ | `scripts/ci.sh`、`scripts/docs.sh`/`docs-check.sh`、`docs/book` |
+| T04 | ✅ | `cargo test -p eg-domain`（score/ids/hash/time） |
+| T05 | ✅ | `eg-domain` paper/answer/rubric/grade + insta 快照 |
+| T06 | ✅ | `crates/eg-domain/tests/contract.rs` 契约套件 |
+| T07 | ✅ | `cargo test -p eg-platform`（config/secrets 0 偏差） |
+| T08 | ✅ | schema v3 + `migrations/` + repo 测试；`PRAGMA integrity_check` |
+| T09 | ✅ | 资产去重/单实例测试（同字节 40 次 1 文件） |
+| T10 | ✅ | tasks 状态机/租约/重试 + 强杀恢复（CP-B） |
+| T11 | ✅ | log/audit/index/diagnostics 测试；审计链哈希校验 |
+| T12 | ✅ | backup/restore/clock 测试；`.bak` 恢复 |
+| T13 | ✅ | `cargo test -p eg-subject-math`（归一化） |
+| T14 | ✅ | 基础比较器测试（数值/表达式/选项） |
+| T15 | ✅ | `cargo test -p eg-rubric`（草稿/模板/静态校验） |
+| T16 | ✅ | `cargo test -p eg-grade`（L1 路由/就绪） |
+| T17 | ✅ | L2 比较器、聚合、输出校验测试 |
+| T18 | ✅ | 模式/门禁/抽检/幂等测试（含抽检只读负向） |
+| T19 | ✅ | inference 注册表/fixture/许可门禁测试 |
+| T20 | 🟡 | sidecar 生命周期与任务授权测试通过（fixture/模拟）；真实 llama.cpp 未验收 |
+| T21 | ✅ | `cargo test -p eg-capture`（导入/拆页/PDF） |
+| T22 | ✅ | 预处理/质量门控/拒收测试（D1 已修） |
+| T23 | ✅ | recognize 页级识别+缓存（fixture OCR 回放，0 diff） |
+| T24 | ✅ | 段级/置信度合成；畸形输出 0 流入上层 |
+| T25 | 🟡 | 全国卷模板 active/retired + 草稿确认已测；模型整理真实后端未接（app 显式失败） |
+| T26 | ✅ | subject-math 全符号比较器测试（抽检 ≥95% 夹具） |
+| T27 | 🟡 | CAS 适配/降级测试通过；真实 sympy sidecar 未参与验收 |
+| T28 | ✅ | 文件名身份/未决测试（零错配，名单外 100% 未决） |
+| T29 | ✅ | 区域对齐/跨页测试 |
+| T30 | ✅ | grade 全量接入 + 提交级判分；platform 适配器测试 |
+| T31 | ✅ | review 服务/审计（命令落库可撤销） |
+| T32 | ✅ | 抽检只读/转标准/重跑；负向用例 `negative_sampled_readonly` |
+| T33 | ✅ | report 统计口径 + 双模式单列测试 |
+| T34 | ✅ | 导出 XLSX/CSV/HTML + 重放一致（acceptance 两次导出摘要一致） |
+| T35 | ✅ | Slint 外壳/导航/通道；`--bench` p99 门禁；`--smoke` 十页 |
+| T36 | ✅ | 导入/进度/设置；真实导入 9 文件→8 提交（app.md §8.8） |
+| T37 | 🟡 | 三栏/键盘/改分/原因/抽检完成；真实 RegradeEngine、redo 持久化、IME 人工验收未做 |
+| T38 | 🟡 | 授权/诊断接真实 platform；规则模型整理未接（显式失败），页面为最小可用 |
+| T39 | 🟡 | egctl doctor/replay/bench/acceptance 可用；判分回放与 bench 全项 TODO |
+| T40 | ✅ | Pages 已上线并验证：[首页](https://yang-spec-0202.github.io/exam-grading/) / 研究页 / acceptance 页均 200；workflow `pages.yml`（CI run 41497887203 / Docs run 41497887182） |
+| T41 | 🟡 | S1 外部夹具端到端 PASS（287 断言/9 负向/12 步，~1.8s）；S2/S3/S5/S7 与 UI 人工、真实模型待办 |
+
+> 统计：✅ 34 · 🟡 7 · ⬜ 0（T41 内 S2/S3/S5/S7 与人工项按 ⬜ 计，见 T41 说明与本文件末「待做」；CP-F 已 ✅，见 `tasks/plan.md` §6）。
 
 ## M0 环境与骨架
 
@@ -319,8 +370,27 @@
 - 验证：验收报告 + `cargo test --workspace` + 手动清单。
 - 依赖：T40。文件：`docs/dev/acceptance.md`。
 - 规模：M。
+- **当前状态（2026-11-05，🟡 部分）**：S1 **外部夹具**端到端已完成——`egctl acceptance --fixtures fixtures/paper-20q --json` PASS（**287 断言 / 0 失败 / 9 负向 / 12 步**，约 1.8 s；`cargo test -p egctl` 全绿）；逐题 expected：张三 132000、李四 77000、王五 109000，Q9–11 部分给分、Q17 低置信、Q16 冲突、Q19 仅规则、Q20 manual、名单外未决。剩余限制：真实 OCR/judge 未参与（S2/S3）、UI 键鼠 E2E（S7）与中文 IME 人工验收待办、app 组合根尚未接 capture 多页归组接口。
+- **待办清单**：⬜ S2 客观题确定性（500 条金标）· ⬜ S3 解答题准确率（200 条金标+校准）· ⬜ S5 路由准确率（300 题标注）· ⬜ S7 键盘复核 ≥15 题/分钟 + IME 人工 · ⬜ S8 判分回放（egctl replay TODO）· ⬜ app 组合根接入 capture 多页归组接口（capture 已交付）。
 
 **检查点 CP-H**：S1–S13 报告完成；文档发布；可交付试用。
+
+## 本轮追加工作（2026-11-04 ～ 2026-11-05）
+
+| 项 | 状态 | 说明/证据 |
+|---|---|---|
+| `fixtures/paper-20q` 外部夹具 | ✅ | 20 题×3 学生 + 图片/OCR/judge/expected + 生成器；自检 1826 项 0 失败（`fixtures/generator/verify_fixtures.py`） |
+| S1 端到端自动化（外部夹具） | ✅ | `egctl acceptance --fixtures fixtures/paper-20q --json` PASS 287 断言 / 0 失败 / 9 负向 / 12 步（~1.8 s）；`cargo test -p egctl` 全绿；`docs/dev/acceptance.md` §S1 |
+| app 真实导入 | ✅ | capture→platform assets→persist 单事务；`fixtures/images` 9 文件→8 提交/8 页/资产 32/审计 17；`docs/dev/research/app.md` §8.8 |
+| app 报表导出联动 | ✅ | 导出清 stale、复核修改置 stale 并提示重导出；10 文件/59 行 |
+| app 图像证据懒加载 + 三栏 | ✅ | platform 资产路径→`slint::Image`；失败显式提示（app.md §8.7） |
+| app 复核真实适配器 | ✅ | platform v3 队列/详情/命令/撤销/排除/导出（app.md §8.6） |
+| `eg-inference` fixture-key 回放 | ✅ | `FixtureCatalog` 精确键/组合键/语义三级匹配 + sha256 完整性校验；`fixtures_wiring` 集成测试 |
+| capture 多页归组（task-52 / tech-spike） | ✅ | 已交付：93 测试，3 学生×2 页 → 3 提交×2 页；外部夹具 S1 端到端已 PASS。app 组合根接入为剩余项（app 真实导入当前仍单文件=单页提交） |
+| 真实模型（OCR/judge）接入验收 | ⬜ | 当前全部为 fixture 后端；S2/S3 需要真实金标与模型 |
+| GitHub Pages 线上发布 | ✅ | [yang-spec-0202.github.io/exam-grading](https://yang-spec-0202.github.io/exam-grading/) 首页/研究页/acceptance 页均 200；workflow `pages.yml`（CI run 41497887203 / Docs run 41497887182） |
+
+**多页归组（已交付）**：capture 多页归组已完成（93 测试，3 学生×2 页 → 3 提交×2 页），外部夹具 S1 端到端 PASS，CP-F 已转 ✅。剩余：app 组合根接入该接口后再复跑 `eg-app --smoke`，并更新 `app.md` §8.8 的导入明细。
 
 ## 检查点汇总（与 `tasks/plan.md` §6 对应）
 
@@ -329,6 +399,6 @@
 - CP-C：T13–T18 后（判分核心夹具 0 diff）
 - CP-D：T19–T24 后（识别/推理/采集）
 - CP-E：T25–T29 后（规则/全符号/对齐）
-- CP-F：T30–T34 后（全量判分/复核/导出）
+- CP-F：T30–T34 后（全量判分/复核/导出）——✅ 外部夹具 paper-20q 端到端 287 断言 / 0 失败 / 9 负向 / 12 步
 - CP-G：T35–T38 后（UI）
 - CP-H：T39–T41 后（验收/文档/发布）

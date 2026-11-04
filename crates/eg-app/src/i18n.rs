@@ -155,6 +155,12 @@ pub(crate) struct Strings {
     pub(crate) action_restore_default: &'static str,
     /// 通用：打开数据目录。
     pub(crate) action_open_data_dir: &'static str,
+    /// 报表页：导出报表。
+    pub(crate) action_export_report: &'static str,
+    /// 报表页：尚未导出。
+    pub(crate) report_never_exported: &'static str,
+    /// 报表页：导出后已修改提示。
+    pub(crate) report_stale: &'static str,
     /// 诊断页：级别标签。
     pub(crate) diagnostics_level: &'static str,
     /// 诊断页：模块标签。
@@ -362,6 +368,9 @@ pub(crate) static ZH_CN: Strings = Strings {
     settings_unsupported_kind: "该类型暂不支持在界面编辑",
     action_restore_default: "恢复上一版配置",
     action_open_data_dir: "打开数据目录",
+    action_export_report: "导出报表",
+    report_never_exported: "尚未导出报表；复核完成后可导出 XLSX/CSV/HTML",
+    report_stale: "导出后已有新的复核修改，请重新导出报表",
     diagnostics_level: "级别",
     diagnostics_module: "模块",
     diagnostics_keyword: "关键词",
@@ -522,6 +531,7 @@ pub(crate) struct PageLabels {
     pub(crate) setting_key_hint: &'static str,
     pub(crate) setting_value_hint: &'static str,
     pub(crate) review_score: &'static str,
+    pub(crate) review_image: &'static str,
     pub(crate) image_evidence: &'static str,
     pub(crate) sampling_title: &'static str,
     pub(crate) sampling_single: &'static str,
@@ -545,6 +555,7 @@ pub(crate) fn page_labels() -> PageLabels {
         setting_key_hint: "例：grade.score_granularity",
         setting_value_hint: "新值",
         review_score: "改分（千分之一分）",
+        review_image: "图像证据（按需加载）",
         image_evidence: "图像证据按资产 id 懒加载（平台资产接口就绪后接入）",
         sampling_title: "抽检不通过：选择重跑范围",
         sampling_single: "仅本题（默认）",

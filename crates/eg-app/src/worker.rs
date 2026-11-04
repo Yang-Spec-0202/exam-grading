@@ -89,14 +89,14 @@ fn run(
                 }
             }
             Command::ImportPick { folder } => match services::pick_paths(folder) {
-                Ok(paths) => services::run_import(paths, &events),
+                Ok(paths) => services::run_import(&platform, paths, &events),
                 Err(message) => {
                     events.send(Event::ImportFailed { message });
                 }
             },
             Command::ImportDrop { paths } => {
                 let paths: Vec<PathBuf> = paths.into_iter().map(PathBuf::from).collect();
-                services::run_import(paths, &events);
+                services::run_import(&platform, paths, &events);
             }
             Command::TaskRetry { task_id } => match eg_domain::TaskId::parse(&task_id) {
                 Ok(id) => {
@@ -118,10 +118,13 @@ fn run(
             },
             Command::ReviewSelect { index } => {
                 review_index = index;
-                if let Some(grade_id) = review_ids.get(index)
-                    && let Some(event) = services::review_detail(&platform, *grade_id)
-                {
-                    events.send(event);
+                if let Some(grade_id) = review_ids.get(index) {
+                    if let Some(event) = services::review_detail(&platform, *grade_id) {
+                        events.send(event);
+                    }
+                    if let Some(image) = services::review_image_event(&platform, *grade_id) {
+                        events.send(image);
+                    }
                 }
             }
             Command::ReviewCommand {
@@ -148,10 +151,13 @@ fn run(
                 let (ids, rows, counts) = services::review_queue(&platform);
                 review_ids = ids;
                 events.send(Event::ReviewLoaded { rows, counts });
-                if let Some(grade_id) = review_ids.get(review_index)
-                    && let Some(event) = services::review_detail(&platform, *grade_id)
-                {
-                    events.send(event);
+                if let Some(grade_id) = review_ids.get(review_index) {
+                    if let Some(event) = services::review_detail(&platform, *grade_id) {
+                        events.send(event);
+                    }
+                    if let Some(image) = services::review_image_event(&platform, *grade_id) {
+                        events.send(image);
+                    }
                 }
             }
             Command::SamplingScope { scope } => {
@@ -276,9 +282,16 @@ fn run(
                 ui_show_ms,
                 first_frame_ms,
             ),
+            Command::ExportReport => match services::export_report(&platform) {
+                Ok(summary) => events.send(Event::ReportExported { summary }),
+                Err(error) => services::notify_error(&events, error),
+            },
             Command::RunSmokeChain => {
-                let summary = services::run_smoke_chain(&platform);
+                let (summary, exported) = services::run_smoke_chain(&platform);
                 eprintln!("[smoke-chain] {summary}");
+                if let Some(exported) = exported {
+                    events.send(Event::ReportExported { summary: exported });
+                }
                 let (ids, rows, counts) = services::review_queue(&platform);
                 review_ids = ids;
                 events.send(Event::ReviewLoaded { rows, counts });
@@ -331,10 +344,13 @@ fn page_load(
             let (ids, rows, counts) = services::review_queue(platform);
             *review_ids = ids;
             events.send(Event::ReviewLoaded { rows, counts });
-            if let Some(grade_id) = review_ids.first()
-                && let Some(event) = services::review_detail(platform, *grade_id)
-            {
-                events.send(event);
+            if let Some(grade_id) = review_ids.first() {
+                if let Some(event) = services::review_detail(platform, *grade_id) {
+                    events.send(event);
+                }
+                if let Some(image) = services::review_image_event(platform, *grade_id) {
+                    events.send(image);
+                }
             }
         }
         PageId::Consent => events.send(Event::ConsentRows {
