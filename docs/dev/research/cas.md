@@ -31,7 +31,7 @@
 | S4 | `uv venv --python 3.12` + `uv pip install sympy`（本机） | 2026-11-02 | 命令输出 | CPython **3.12.15**；sympy **1.14.0** + mpmath 1.3.0；准备 3.59 s、安装 16 ms、总 7.08 s |
 | S5 | https://crates.io 无关；`importlib.metadata.metadata("sympy")["License"]`（本机） | sympy 1.14.0 | 命令输出 | `License: BSD`（BSD-3-Clause 系，白名单内） |
 | S6 | https://www.sympy.org/ · https://docs.sympy.org/latest/ | 1.14 文档（2026-11 查阅） | 官方文档 | `simplify`、`Matrix.det()`、`solve`、`parse_expr` 与 `implicit_multiplication_application` 变换 |
-| S7 | 本机 sidecar 冒烟（`/tmp/cas-spike`，验证后删除） | 2026-11-02 | 命令输出 | 协议、耗时、正确性（§5） |
+| S7 | 本机 sidecar 冒烟（`<tmp-dir>/cas-spike`，验证后删除） | 2026-11-02 | 命令输出 | 协议、耗时、正确性（§5） |
 | S8 | `SPEC-subject-math.md` §96–106、§135、§145、§167 | 规范 v0.2.2 | 内部规范 | sidecar 形态、10 s 启动、≤3 s 单次、失败降级「无法判定」 |
 
 ## 4. 结论
@@ -114,7 +114,7 @@ uv pip install --python .venv/bin/python sympy  # sympy==1.14.0 + mpmath==1.3.0�
 ./.venv/bin/python -VV                          # Python 3.12.15
 ./.venv/bin/python -c "import sympy; print(sympy.__version__)"   # 1.14.0
 
-# sidecar 协议冒烟（/tmp/cas-spike/sidecar.py，验证后删除）
+# sidecar 协议冒烟（<tmp-dir>/cas-spike/sidecar.py，验证后删除）
 /usr/bin/time -p ./.venv/bin/python sidecar.py <<'JSON'
 {"op":"ping"}
 {"op":"simplify_zero","lhs":"sin(x)**2+cos(x)**2","rhs":"1"}

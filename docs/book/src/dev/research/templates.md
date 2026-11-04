@@ -70,7 +70,7 @@
 
 | 项目 | 实测值 | 命令/方法 | 结果摘要 |
 |---|---|---|---|
-| TOML 解析器 | Python 3.13.16（`/opt/homebrew/bin/python3.13`，自带 `tomllib`） | `python3.13 /tmp/validate_templates.py` | 4 个模板全部解析成功 |
+| TOML 解析器 | Python 3.13.16（`/opt/homebrew/bin/python3.13`，自带 `tomllib`） | `python3.13 <tmp-dir>/validate_templates.py` | 4 个模板全部解析成功 |
 | 结构校验 | 自写临时脚本（不入库） | 同上 | `ERRORS: 0, WARNINGS: 0`：总分=150000×4；ordinal 连续；kind 合法；skeleton 引用存在；比例合计 1000‰；依赖存在且无环；0.1 分网格可整除 |
 | 来源可达性 | 12 条中 11 条 HTTP 200，1 条 412（S9 官方期刊反爬） | `curl -sS -o /dev/null -L -w "%{http_code}"`（2026-11-02，带桌面 UA） | S1–S8、S10–S12 均 200；S9 需浏览器打开 |
 | 正文核对 | 抓取并抽取 S1/S3/S4/S5/S6/S7/S8/S10 正文 | `curl` + 自写 HTML 文本抽取脚本 | 关键句已逐条写入 §4「依据」列 |

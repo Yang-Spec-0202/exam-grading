@@ -39,7 +39,7 @@
 | S11 | https://github.com/slint-ui/slint/issues/14032 | 2026-10-13 更新，open | 官方 issue | iOS 上 `LineEdit` 无法接受中文 IME（英文正常）；移动端问题 |
 | S12 | https://github.com/slint-ui/slint/issues/14292 | 2026-10-31 更新，open | 官方 issue | `FocusScope` 缺少 IME API（焦点与 IME 联动的缺口） |
 | S13 | https://raw.githubusercontent.com/slint-ui/slint/master/README.md | master@2026-11-02 | 官方 README | 支持平台：Windows / macOS / Linux（桌面） |
-| S14 | 本机实测（`/tmp/slint-spike`，验证后已删除） | 2026-11-02 | 命令输出 + 截图 | 构建、运行、跨线程更新、截图（见 §5） |
+| S14 | 本机实测（`<tmp-dir>/slint-spike`，验证后已删除） | 2026-11-02 | 命令输出 + 截图 | 构建、运行、跨线程更新、截图（见 §5） |
 
 ## 4. 结论
 
@@ -66,7 +66,7 @@
 | 二进制体积 | release **14 MB**；debug 54 MB | `ls -lh target/release/slint-spike` | 静态链接 Slint 运行时，无额外 dylib |
 | 动态依赖 | 仅系统框架 | `otool -L` | OpenGL、ApplicationServices、CoreGraphics、CoreVideo、Carbon、AppKit、Foundation、CoreFoundation、QuartzCore、CoreText、ColorSync、CoreServices、libSystem、libobjc、libiconv |
 
-**最小窗口 spike（`/tmp/slint-spike`，验证后已删除）做了什么**
+**最小窗口 spike（`<tmp-dir>/slint-spike`，验证后已删除）做了什么**
 
 1. `ui/app.slint`：`Window` + 中文标题 `Text` + `@image-url` 图片 + `ListView`（`[string]` 模型）+ `Button` 回调 + `LineEdit`。
 2. `src/main.rs`：`include_modules!()` 生成 `AppWindow`；后台 `std::thread` 循环 5 次 `slint::invoke_from_event_loop` 更新 `counter`/`status`；`ui.on_ping(...)` 回调；`slint::Timer::SingleShot` 3.5 s 后 `quit_event_loop`。
@@ -82,7 +82,7 @@ event loop exited cleanly
 ```
 
 4. 截图（`screencapture -x`，窗口可见）：中文标题「Slint 最小窗口 · 中文 IME 检查」正常渲染、渐变 `Image` 正常显示、`ListView` 三行中文/英文正常、两个按钮可见。
-   - 证据文件归档：`/tmp/tech-spike-evidence/slint-window.png`、`slint-run.log`（临时目录，不入库）。
+   - 证据文件归档：`<tmp-dir>/tech-spike-evidence/slint-window.png`、`slint-run.log`（临时目录，不入库）。
 
 **编译期行为（实测到的「真实 API 约束」，不是文档推测）**：
 
@@ -93,7 +93,7 @@ event loop exited cleanly
 | `build.rs` + `slint_build::compile()` 但 Rust 侧不 `include_modules!()` | `error[E0433]: cannot find type 'AppWindow'` | 生成代码需 `slint::include_modules!();` |
 | `text: "Ping ({counter})"` | 按钮显示字面量 `Ping ({counter})` | 字符串插值不能靠 `{}`；应写 `"Ping (" + counter + ")"` 或格式化到中间属性（`SPEC-app.md` 也要求 Slint 文件只做极薄格式化） |
 
-**许可实测（`/tmp/slint-lic`，仅 `slint = "1.18"` + 仓库 `deny.toml`）**
+**许可实测（`<tmp-dir>/slint-lic`，仅 `slint = "1.18"` + 仓库 `deny.toml`）**
 
 ```
 error[rejected]: failed to satisfy license requirements
@@ -133,7 +133,7 @@ source "$HOME/.cargo/env"
 # 1) 版本与文档一致性
 cargo search slint --limit 1                     # → slint = "1.18.1"
 # 2) 最小窗口（在 /tmp 临时 crate 中；仓库不入依赖）
-mkdir -p /tmp/slint-spike/{src,ui/assets} && cd /tmp/slint-spike
+mkdir -p <tmp-dir>/slint-spike/{src,ui/assets} && cd <tmp-dir>/slint-spike
 #    Cargo.toml: slint = "1.18" / [build-dependencies] slint-build = "1.18"
 #    build.rs:   slint_build::compile("ui/app.slint")
 #    ui/app.slint: import { Button, LineEdit, ListView } from "std-widgets.slint"; export component AppWindow inherits Window { ... }
@@ -143,6 +143,6 @@ otool -L target/release/slint-spike              # 仅系统框架
 ./target/release/slint-spike                     # 窗口可见；日志 "event loop exited cleanly"
 screencapture -x run.png                         # 截图证据
 # 3) 许可冲突复现
-cp <repo>/deny.toml /tmp/slint-lic/deny.toml
-cd /tmp/slint-lic && cargo deny check licenses   # slint + BSD-2-Clause/BSL-1.0/Zlib/Unlicense 被拒
+cp <repo>/deny.toml <tmp-dir>/slint-lic/deny.toml
+cd <tmp-dir>/slint-lic && cargo deny check licenses   # slint + BSD-2-Clause/BSL-1.0/Zlib/Unlicense 被拒
 ```

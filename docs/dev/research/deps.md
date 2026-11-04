@@ -34,7 +34,7 @@
 | S5 | https://docs.rs/keyring/4.2.0/keyring/v1/struct.Entry.html | 4.2.0 文档 | 官方 API 文档 | 方法清单与 `NoDefaultStore` 错误语义 |
 | S6 | https://crates.io/api/v1/crates/tracing · /tracing-appender | 2026-11-02 | 官方 registry | `tracing 0.1.44`、`tracing-appender 0.2.5` |
 | S7 | https://crates.io/api/v1/crates/serde · /serde_json · /toml · /ulid · /insta · /proptest · /image · /kamadak-exif · /rust_xlsxwriter · /blake3 | 2026-11-02 | 官方 registry | 版本：serde 1.0.229、serde_json 1.0.154、toml 1.1.8+spec-1.1.0、ulid 3.0.0、insta 1.49.0、proptest 1.12.0、image 0.25.10、kamadak-exif 0.6.1、rust_xlsxwriter 0.102.0、blake3 1.8.7 |
-| S8 | 本机 `/tmp/deps-spike`（验证后已删除） | 2026-11-02 | 命令输出 | 逐项功能冒烟结果（见 §5） |
+| S8 | 本机 `<tmp-dir>/deps-spike`（验证后已删除） | 2026-11-02 | 命令输出 | 逐项功能冒烟结果（见 §5） |
 | S9 | https://docs.rs/ulid/3.0.0/ulid/struct.Generator.html（随 crate 文档）+ 实测 | 3.0.0 | 官方 API 文档 | `Generator::new()` / `generate()` 同毫秒单调；`Ulid::from_parts(ts, rand: u128)` |
 | S10 | 本机 `cargo deny check licenses`（仓库 `deny.toml` 白名单） | cargo-deny 0.20.2，2026-11-02 | 命令输出 | 候选依赖树仅 `Zlib`、`BSD-2-Clause` 被拒（Slint 树另有 BSL-1.0/Unlicense/GPL 等，见 `slint.md`） |
 
@@ -53,7 +53,7 @@
 
 ## 5. 版本实测
 
-**构建环境**：`/tmp/deps-spike`（临时 crate，验证后删除），`cargo build` 依赖全量编译 **27.7 s**，release 43.9 s（含 `image`/`hayro`/`rusqlite` bundled 的 C 编译）。
+**构建环境**：`<tmp-dir>/deps-spike`（临时 crate，验证后删除），`cargo build` 依赖全量编译 **27.7 s**，release 43.9 s（含 `image`/`hayro`/`rusqlite` bundled 的 C 编译）。
 
 | 依赖 | 实测版本 | 命令 | 结果摘要 |
 |---|---|---|---|
@@ -109,7 +109,7 @@ licenses FAILED
 ```bash
 source "$HOME/.cargo/env"
 # 临时 crate（验证后删除）：rusqlite bundled / keyring / tracing / serde / ulid / insta / proptest / image / exif / xlsx / blake3
-mkdir -p /tmp/deps-spike/src && cd /tmp/deps-spike
+mkdir -p <tmp-dir>/deps-spike/src && cd <tmp-dir>/deps-spike
 # Cargo.toml 关键行：
 #   rusqlite = { version = "0.41", features = ["bundled"] }
 #   keyring = "4"                       # 不要写 features=["apple-native"]（4.x 无此特性）

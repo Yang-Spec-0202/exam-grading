@@ -24,7 +24,7 @@
 scripts/acceptance/run.sh
 
 # 机器可读 JSON（可同时写文件）
-scripts/acceptance/run.sh --json --out /tmp/acceptance.json
+scripts/acceptance/run.sh --json --out <output-dir>/acceptance.json
 
 # 快速回归（跳过全量测试）
 scripts/acceptance/run.sh --quick --skip-bench
@@ -68,7 +68,7 @@ scripts/acceptance/run.sh --quick --skip-bench
   `fixtures/ocr`（7 页记录 + 2 负向）+ `fixtures/judge`（8 条正常/低置信/冲突记录 + 1 负向）。
 - **命令**：
 
-  `egctl acceptance --fixtures fixtures/paper-20q --data-dir <临时目录> --json --out /tmp/acceptance-s1.json`
+  `egctl acceptance --fixtures fixtures/paper-20q --data-dir <临时目录> --json --out <output-dir>/acceptance-s1.json`
 
   退出码：`0` = PASS，`1` = FAIL；`--json` 输出步骤/断言数/失败/负向用例/产物路径；`--out` 另写 JSON 文件。
 - **步骤（12 步，全部真实执行）**：
@@ -265,14 +265,14 @@ scripts/acceptance/run.sh --quick --skip-bench
 
 | 日期时间 | 触发 | 环境/版本 | 结果摘要 | 证据位置 | 结论 |
 |---|---|---|---|---|---|
-| 2026-11-03T01:16+08:00 | `scripts/acceptance/run.sh --json` | macOS 27.0.1 / M4 / rustc 1.99.1 | 见 §6（WARN：仅 egctl 就绪度） | `/tmp/acceptance-final.json`（临时） | 滚动基线，非验收结论 |
+| 2026-11-03T01:16+08:00 | `scripts/acceptance/run.sh --json` | macOS 27.0.1 / M4 / rustc 1.99.1 | 见 §6（WARN：仅 egctl 就绪度） | `<output-dir>/acceptance-final.json`（临时） | 滚动基线，非验收结论 |
 | 待填 |  |  |  |  |  |
 
 记录要求：附 `run.sh --json` 输出（或 `--out` 文件）与失败日志路径；人工项附截图/录屏；不得只写「通过」。
 
 ## 6. 冻结基线实测记录（2026-11-03T01:37+08:00，交付冻结）
 
-> 本轮为**交付冻结前最后一次全量真实执行**：`bash scripts/acceptance/run.sh --json --skip-egctl --out /tmp/acceptance-frozen.json`。工作区在提交 `d2fc2a8`（core）/`dd1ca2c`（scripts+data）前后一致，无并行写入。历史滚动：00:36 全量 1015 passed → 01:03 1063 passed → 01:16 1063 passed → **01:37 冻结 1063 passed（本表）**。
+> 本轮为**交付冻结前最后一次全量真实执行**：`bash scripts/acceptance/run.sh --json --skip-egctl --out <output-dir>/acceptance-frozen.json`。工作区在提交 `d2fc2a8`（core）/`dd1ca2c`（scripts+data）前后一致，无并行写入。历史滚动：00:36 全量 1015 passed → 01:03 1063 passed → 01:16 1063 passed → **01:37 冻结 1063 passed（本表）**。
 
 环境：macOS-27.0.1-arm64 / arm64 / rustc 1.99.1 (58cf8f9c3 2026-10-13) / cargo 1.99.1 (5f94df478 2026-08-27)。
 
@@ -290,7 +290,7 @@ scripts/acceptance/run.sh --quick --skip-bench
 补充观察：
 
 - 本轮为冻结基线：代码门禁 5/5 PASS、0 WARN、0 FAIL；egctl 两项因 `--skip-egctl` 跳过，未计入 WARN。
-- 验收 JSON：`/tmp/acceptance-frozen.json`（临时路径；归档时复制到交付证据目录）。各步骤原始日志路径记录在该 JSON 的 `steps[].log` 字段。
+- 验收 JSON：`<output-dir>/acceptance-frozen.json`（临时路径；归档时复制到交付证据目录）。各步骤原始日志路径记录在该 JSON 的 `steps[].log` 字段。
 - `cargo test --workspace` 的 2 个 ignored 用例为**设计内跳过**（需真实模型权重 / 需 release 性能模式），非缺陷。
 - egctl 的 doctor/bench 就绪度 WARN 语义见 `scripts/acceptance/README.md`；UI 端到端（S1/S7）与真实试卷/金标（S2/S3/S5）仍是阻塞项，见 §7 与 §3 各条。
 

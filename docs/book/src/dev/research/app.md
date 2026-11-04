@@ -121,7 +121,7 @@
 
 | 场景 | 命令 | 观察结果 |
 |---|---|---|
-| 启动 + 十页外壳 | `EXAM_GRADING_DATA_DIR=/tmp/eg-app-smoke cargo run -p eg-app -- --smoke` | 窗口显示；`error_visible=false`；`page_index=0`；模式「标准模式」；通道计数全 0；提示行正常 |
+| 启动 + 十页外壳 | `EXAM_GRADING_DATA_DIR=<data-dir>/eg-app-smoke cargo run -p eg-app -- --smoke` | 窗口显示；`error_visible=false`；`page_index=0`；模式「标准模式」；通道计数全 0；提示行正常 |
 | 后台进度（worker → 事件通道 → UI） | 同上（冒烟自动发 `RunPlaceholderJob`） | `progress="占位后台任务 10/10"`，说明 worker 的 10 条进度事件已回投并投影 |
 | 错误呈现 + 详情折叠 | `... -- --smoke --demo-error` | `error_visible=true`、`error_detail_visible=false`（默认折叠）、模式/页面/通道状态正常 |
 | 性能 | `... -- --bench` | 输出见 §8.1，`verdict=pass`，退出码 0 |
@@ -225,8 +225,8 @@ cargo build -p eg-app --release
 
 ```bash
 cargo build -p eg-app --release
-rm -rf /tmp/eg-app-final-smoke
-EXAM_GRADING_DATA_DIR=/tmp/eg-app-final-smoke ./target/release/eg-app --smoke
+rm -rf <data-dir>/eg-app-final-smoke
+EXAM_GRADING_DATA_DIR=<data-dir>/eg-app-final-smoke ./target/release/eg-app --smoke
 ```
 
 实测（2026-11-03，macOS 27.0.1 / M4；`first_frame=189.5ms`）：
@@ -272,8 +272,8 @@ EXAM_GRADING_DATA_DIR=/tmp/eg-app-final-smoke ./target/release/eg-app --smoke
 
 ```bash
 cargo build -p eg-app --release
-rm -rf /tmp/eg-app-s1
-EXAM_GRADING_DATA_DIR=/tmp/eg-app-s1 ./target/release/eg-app --smoke
+rm -rf <data-dir>/eg-app-s1
+EXAM_GRADING_DATA_DIR=<data-dir>/eg-app-s1 ./target/release/eg-app --smoke
 ```
 
 实测（2026-11-04，macOS / M4；`first_frame=423.2ms`）：
@@ -311,9 +311,9 @@ EXAM_GRADING_DATA_DIR=/tmp/eg-app-s1 ./target/release/eg-app --smoke
 
 - 试卷/班级/名单：`fixtures/paper-20q/{paper,classroom,students}.json`（20 题、3 学生；与 eg-domain 类型直接反序列化后落 platform）；
 - 图片：`fixtures/images/`（9 个文件：张三 p1/p2、李四 p1/p2、SO2026-003 p1/p2、`IMG_20261104_001.jpg` 不规范命名、`王五_exif6.jpg` EXIF、`张三_p2-copy.png` 与 `张三_p2.png` 同字节重复）；
-- 命令：`EXAM_GRADING_DATA_DIR=/tmp/eg-app-s1fix target/release/eg-app --smoke`。
+- 命令：`EXAM_GRADING_DATA_DIR=<data-dir>/eg-app-s1fix target/release/eg-app --smoke`。
 
-**实测结果（数据根 `/tmp/eg-app-s1fix`，本机 macOS/M4，首发 160.1ms）**
+**实测结果（数据根 `<data-dir>/eg-app-s1fix`，本机 macOS/M4，首发 160.1ms）**
 
 ```
 [smoke-chain] 基础夹具：fixtures/paper-20q 试卷（20 题 / 3 学生）；
@@ -323,14 +323,14 @@ EXAM_GRADING_DATA_DIR=/tmp/eg-app-s1 ./target/release/eg-app --smoke
               冒烟断言：3/3 通过；
               任务/复核队列：8 条（标准 8 · 抽检 0 · 合计 8（platform 队列））；
               复核改分：命令已执行：override；
-              报表已导出到 /tmp/eg-app-s1fix/exports（10 个文件，59 行）
+              报表已导出到 <data-dir>/eg-app-s1fix/exports（10 个文件，59 行）
 [smoke] page progress: 运行中 0 / 待运行 1 / 失败 0
 [smoke] page review: 标准 8 · 抽检 0 · 合计 8（platform 队列）
-[smoke] page report: 报表已导出到 /tmp/eg-app-s1fix/exports（10 个文件，59 行）
+[smoke] page report: 报表已导出到 <data-dir>/eg-app-s1fix/exports（10 个文件，59 行）
 [smoke] image_note=""（图像证据加载成功）
 ```
 
-`--smoke --demo-error`（数据根 `/tmp/eg-app-s1err`）：`injected_error=1`、`error_visible=true`、`error_detail_visible=false`，复核队列同为 8 条。
+`--smoke --demo-error`（数据根 `<data-dir>/eg-app-s1err`）：`injected_error=1`、`error_visible=true`、`error_detail_visible=false`，复核队列同为 8 条。
 
 **断言（冒烟内嵌 3/3 通过 + 人工核对）**
 
@@ -363,7 +363,7 @@ EXAM_GRADING_DATA_DIR=/tmp/eg-app-s1 ./target/release/eg-app --smoke
 
 ```bash
 source "$HOME/.cargo/env"
-cd /Users/v/Documents/deepseek-harness/default-workspace/exam-grading
+cd <repo-root>
 
 # 1) 构建（含 .slint 构建期编译校验）
 cargo build -p eg-app
@@ -372,15 +372,15 @@ cargo build -p eg-app
 cargo test -p eg-app
 
 # 3) 冒烟：启动 + 进度 + 错误呈现
-EXAM_GRADING_DATA_DIR=/tmp/eg-app-smoke cargo run -p eg-app -- --smoke
-EXAM_GRADING_DATA_DIR=/tmp/eg-app-error cargo run -p eg-app -- --smoke --demo-error
+EXAM_GRADING_DATA_DIR=<data-dir>/eg-app-smoke cargo run -p eg-app -- --smoke
+EXAM_GRADING_DATA_DIR=<data-dir>/eg-app-error cargo run -p eg-app -- --smoke --demo-error
 
 # 4) 性能（切页/事件/命令分位；未达标退出码 2）
-EXAM_GRADING_DATA_DIR=/tmp/eg-app-bench cargo run -p eg-app -- --bench
+EXAM_GRADING_DATA_DIR=<data-dir>/eg-app-bench cargo run -p eg-app -- --bench
 
 # 5) 冷启动 P95（10 次）
 for i in $(seq 1 10); do
-  EXAM_GRADING_DATA_DIR=/tmp/eg-app-cold cargo run -q -p eg-app -- --smoke 2>/dev/null | grep -o 'first_frame":[0-9.]*'
+  EXAM_GRADING_DATA_DIR=<data-dir>/eg-app-cold cargo run -q -p eg-app -- --smoke 2>/dev/null | grep -o 'first_frame":[0-9.]*'
 done
 
 # 6) 依赖合规

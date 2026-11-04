@@ -106,10 +106,10 @@ CI 回归：`cargo test -p egctl --test acceptance`。
 
 ```bash
 cargo build -p eg-app --release
-EXAM_GRADING_DATA_DIR=/tmp/eg-app-demo ./target/release/eg-app --smoke
+EXAM_GRADING_DATA_DIR=<data-dir>/eg-app-demo ./target/release/eg-app --smoke
 ```
 
-期望（数据根 `/tmp/eg-app-demo`）：真实导入 `fixtures/images` 9 文件 → 8 提交 / 8 页 / 资产链接 32 / 审计 17（同批重复 1 去重、命名提醒一次）；随后补夹具判分、复核改分、导出 XLSX+CSV+HTML。该模式会打开桌面窗口并在数秒后自动退出；无真实模型参与。
+期望（数据根 `<data-dir>/eg-app-demo`）：真实导入 `fixtures/images` 9 文件 → 8 提交 / 8 页 / 资产链接 32 / 审计 17（同批重复 1 去重、命名提醒一次）；随后补夹具判分、复核改分、导出 XLSX+CSV+HTML。该模式会打开桌面窗口并在数秒后自动退出；无真实模型参与。
 
 详细实测记录：[app 研究记录 §8.8](../dev/research/app.md)、[S1 验收记录](../dev/acceptance.md)。
 

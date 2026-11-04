@@ -35,7 +35,7 @@
 | S8 | https://crates.io/api/v1/crates/poppler-rs | 2026-11-02：`0.26.0`（2026-02-21） | 官方 registry | 存在但为 poppler-glib 绑定（需系统 poppler + GPL 系许可，见 §6 R4） |
 | S9 | https://raw.githubusercontent.com/bokuweb/docx-rs/main/README.md | master@2026-11-02 | 官方 README | `read_docx(&bytes)` 可解析 DOCX 包为 `Docx` 模型（读 + 写） |
 | S10 | https://crates.io/api/v1/crates/docx-rs | 2026-11-02：`0.4.22`（2026-07-21），license `MIT` | 官方 registry | 版本/许可 |
-| S11 | 本机 `/tmp/deps-spike`（hayro）与 `/tmp/pdfium-spike`（pdfium-render） | 2026-11-02 | 命令输出 + 渲染图 | 构建、渲染耗时、文本抽取、透明背景、CJK 质量（§5） |
+| S11 | 本机 `<tmp-dir>/deps-spike`（hayro）与 `<tmp-dir>/pdfium-spike`（pdfium-render） | 2026-11-02 | 命令输出 + 渲染图 | 构建、渲染耗时、文本抽取、透明背景、CJK 质量（§5） |
 | S12 | https://docs.rs/hayro/0.8.0/hayro/struct.RenderCache.html · https://docs.rs/vello_cpu/0.3.0/vello_cpu/struct.Pixmap.html | 0.8.0 / 0.3.0 | 官方 API 文档 | `RenderCache::new()`；`Pixmap::data_as_u8_slice()` / `width()` / `height()`（premultiplied RGBA8） |
 
 ## 4. 结论
@@ -51,7 +51,7 @@
 
 ## 5. 版本实测
 
-### 5.1 hayro（`/tmp/deps-spike`）
+### 5.1 hayro（`<tmp-dir>/deps-spike`）
 
 | 项 | 实测 |
 |---|---|
@@ -59,11 +59,11 @@
 | 构建 | 随 deps crate 一起 `cargo build` 通过（debug 27.7 s 全量；hayro 部分含 `flate2/zlib-rs` 等）；release 构建 43.9 s |
 | 合成 2 页 PDF | `pages=2`；2× 渲染 600×400 用时 19.0 ms（debug） |
 | 真实中文 PDF（10 页，A4） | `pages=10`；A4@300 DPI **2480×3507，14.8/15.9/24.9 ms**（release 3 次）；PNG 534 KB |
-| 质量 | 与 pdfium 渲染同页对照：版头红色标题、文号、正文、红章、页码均一致；无缺字/错位（附图证据 `/tmp/tech-spike-evidence/pdf-hayro.png`、`pdf-pdfium.png`） |
+| 质量 | 与 pdfium 渲染同页对照：版头红色标题、文号、正文、红章、页码均一致；无缺字/错位（附图证据 `<tmp-dir>/tech-spike-evidence/pdf-hayro.png`、`pdf-pdfium.png`） |
 | **透明背景坑** | 保存出的 PNG 为 RGBA，**94.0% 像素 alpha=0**（背景透明）→ 转 RGB 后背景变黑；直接送 OCR 会严重降质。修法：`PixmapSettings.bg_color` 设白，或渲染后 `alpha_composite` 到白底（实测改白底后 OCR 全文正确） |
 | API 事实 | `Pdf::new(Vec<u8>)` → `pdf.pages()` → `render(page, &RenderCache::new(), &InterpreterSettings::default(), &RenderSettings::default(), &PixmapSettings{..})` → `Pixmap::data_as_u8_slice()`；`RenderCache` 建议每文档建一次复用（S12） |
 
-### 5.2 pdfium-render（`/tmp/pdfium-spike`）
+### 5.2 pdfium-render（`<tmp-dir>/pdfium-spike`）
 
 | 项 | 实测 |
 |---|---|
@@ -118,7 +118,7 @@
 source "$HOME/.cargo/env"
 
 # ── hayro（纯 Rust）
-mkdir -p /tmp/deps-spike/src && cd /tmp/deps-spike   # Cargo.toml: hayro = "0.8"
+mkdir -p <tmp-dir>/deps-spike/src && cd <tmp-dir>/deps-spike   # Cargo.toml: hayro = "0.8"
 cargo build --release
 ./target/release/deps-spike        # hayro-pdf: pages=2 render=600x400 ... / pages=10 render=2480x3507 in 14.8ms
 # 透明背景检查（Python + Pillow）
@@ -129,7 +129,7 @@ print(im.mode, (np.asarray(im)[...,3]==0).mean())   # RGBA, alpha0≈0.94
 PY
 
 # ── pdfium（动态库）
-mkdir -p /tmp/pdfium-spike && cd /tmp/pdfium-spike
+mkdir -p <tmp-dir>/pdfium-spike && cd <tmp-dir>/pdfium-spike
 curl -sL -o pdfium.tgz https://github.com/bblanchon/pdfium-binaries/releases/download/chromium/8125/pdfium-mac-arm64.tgz
 tar xzf pdfium.tgz && ls -lh lib/libpdfium.dylib         # 7.0M
 # Cargo.toml: pdfium-render = "0.9"
@@ -137,5 +137,5 @@ PDFIUM_DYNAMIC_LIB_PATH=$PWD/lib/libpdfium.dylib ./target/release/pdfium-spike
 # → pages=2 / render 300dpi ... / text_len=388
 
 # ── 许可证清点
-ls /tmp/pdfium-spike/licenses/    # 18 个第三方许可文件
+ls <tmp-dir>/pdfium-spike/licenses/    # 18 个第三方许可文件
 ```

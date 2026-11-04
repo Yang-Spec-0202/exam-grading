@@ -72,7 +72,7 @@
 |---|---|---|---|
 | cargo / rustc | 1.99.1 / 1.99.1 | `cargo --version`、`rustc --version` | MSRV 1.97 满足 |
 | egctl | 0.1.0 | `cargo run -p egctl -- version` | `egctl 0.1.0（exam-grading 运维/验收 CLI）`，退出 0 |
-| doctor（空数据目录） | — | `cargo run -p egctl -- --data-dir /tmp/… doctor` | WARN（退出 2）：数据目录/配置/DB/日志未创建；模型注册表已定位（7 本地/1 云端，0 已安装）；llama-server 已找到（`/opt/homebrew/bin/llama-server`）；端口 8081–8085 空闲；report 自检 OK；5 个并行模块 WARN |
+| doctor（空数据目录） | — | `cargo run -p egctl -- --data-dir <tmp-dir>/… doctor` | WARN（退出 2）：数据目录/配置/DB/日志未创建；模型注册表已定位（7 本地/1 云端，0 已安装）；llama-server 已找到（`/opt/homebrew/bin/llama-server`）；端口 8081–8085 空闲；report 自检 OK；5 个并行模块 WARN |
 | doctor（备份后的数据目录） | — | 同上 | WARN（退出 2）：data_dir/config/db/instance/audit/cas/logs 均 OK（schema v3、integrity 通过、审计链 0 条完整）；models 仍 WARN（未下载权重）；模块 WARN |
 | backup | — | `egctl backup --json --data-dir …` | 成功：schema 3、DB 438272 字节、SHA-256 `7a1e5da9…`、清单写入 `backups/<时间戳>/manifest.json`（直接走 `eg-platform`） |
 | restore | — | `egctl restore <备份目录> --json` | 成功：恢复后 integrity 通过、schema 3、安全副本 `backups/<时间戳>-restore-safety/exam-grading.sqlite3` |
