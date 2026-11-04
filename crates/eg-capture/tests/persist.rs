@@ -716,3 +716,107 @@ fn key_reference_pages_persist_as_key_page_assets() {
     );
     platform.close().expect("关闭 platform");
 }
+
+#[test]
+fn grouped_multipage_submission_persists_two_pages_and_group_audit() {
+    let dir = tempfile::tempdir().expect("临时目录");
+    let (platform, clock) = open_platform(dir.path());
+    let classroom = Classroom {
+        id: platform.ids().next_classroom_id().expect("班级 id"),
+        name: "高二（10）班".to_owned(),
+        term: "2026 秋".to_owned(),
+    };
+    let paper = seed_classroom_and_paper(&platform, &classroom);
+    // 同一学生 2 页：文件名带页码后缀 → 归组为 1 个提交 2 页。
+    let outcome = run_import(
+        &platform,
+        &clock,
+        classroom.id,
+        paper.id,
+        Ulid::from_u128(120),
+        ImportKind::StudentWork,
+        vec![
+            FileInput::from_bytes(
+                "张三_p2.png",
+                support::png(&support::marked(&support::a4_page_hd(), 51)),
+            ),
+            FileInput::from_bytes(
+                "张三_p1.png",
+                support::png(&support::marked(&support::a4_page_hd(), 52)),
+            ),
+        ],
+    );
+    assert_eq!(outcome.submissions.len(), 1);
+    assert_eq!(outcome.submissions[0].pages.len(), 2);
+    assert_eq!(outcome.report.groups.len(), 1);
+
+    let summary = persist(
+        &platform,
+        PersistRequest {
+            outcome: &outcome,
+            task_id: None,
+        },
+    )
+    .expect("多页组落库成功");
+    assert_eq!(summary.submissions, 1);
+    assert_eq!(summary.pages, 2);
+    assert_eq!(count_rows(&platform, "submission"), 1);
+    assert_eq!(count_rows(&platform, "page"), 2);
+
+    let submission = &outcome.submissions[0];
+    let read_pages = platform
+        .db()
+        .read(move |conn| repo::list_pages(conn, submission.id))
+        .expect("读页面");
+    assert_eq!(
+        read_pages
+            .iter()
+            .map(|page| page.page_no)
+            .collect::<Vec<_>>(),
+        vec![1, 2],
+        "落库页号必须连续"
+    );
+
+    // 审计记录组信息（页数/页序/文件指纹），且不含姓名/文件名原文。
+    let notes: Vec<String> = platform
+        .db()
+        .read(|conn| {
+            let mut statement = conn
+                .prepare("SELECT note FROM audit_log WHERE action = 'submission.import'")
+                .map_err(eg_platform::PlatformError::from)?;
+            let rows = statement
+                .query_map([], |row| row.get::<_, String>(0))
+                .map_err(eg_platform::PlatformError::from)?;
+            let mut out = Vec::new();
+            for row in rows {
+                out.push(row.map_err(eg_platform::PlatformError::from)?);
+            }
+            Ok(out)
+        })
+        .expect("读审计");
+    assert_eq!(notes.len(), 1);
+    let note = &notes[0];
+    assert!(note.contains("多页归组"), "{note}");
+    assert!(note.contains("页数=2"), "{note}");
+    assert!(note.contains("页序=[1, 2]"), "{note}");
+    assert!(note.contains("文件数=2"), "{note}");
+    assert!(
+        !note.contains("张三"),
+        "审计不得包含学生姓名/文件名原文：{note}"
+    );
+    assert!(!note.contains(".png"), "审计不得包含文件名原文：{note}");
+
+    let batch_note: String = platform
+        .db()
+        .read(|conn| {
+            conn.query_row(
+                "SELECT note FROM audit_log WHERE action = 'import.batch'",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(eg_platform::PlatformError::from)
+        })
+        .expect("读批次审计");
+    assert!(batch_note.contains("组=1"), "{batch_note}");
+    platform.close().expect("关闭 platform");
+}

@@ -143,7 +143,7 @@ pub fn persist(
 
     let batch_note = format!(
         "导入批次：kind={kind}，文件 ok={}/{}，页面 total={}（good={} acceptable={} rejected={} failed={}），\
-         pipeline={}，options_hash={}",
+         组={}（缺页组={}，归组警告={}），pipeline={}，options_hash={}",
         outcome.report.files_ok,
         outcome.report.files_total,
         outcome.report.pages_total,
@@ -151,6 +151,14 @@ pub fn persist(
         outcome.report.pages_acceptable,
         outcome.report.pages_rejected,
         outcome.report.pages_failed,
+        outcome.report.groups.len(),
+        outcome
+            .report
+            .groups
+            .iter()
+            .filter(|group| !group.missing_pages.is_empty())
+            .count(),
+        outcome.report.group_warnings.len(),
         outcome.report.pipeline_version,
         outcome.report.options_hash,
     );
@@ -171,13 +179,35 @@ pub fn persist(
 
     for submission in &submissions {
         // 审计备注刻意不含来源文件名/学号/姓名（可能是学生身份信息）。
+        let group = outcome
+            .report
+            .groups
+            .iter()
+            .find(|group| group.submission_id == submission.id);
+        let note = match group {
+            Some(group) => format!(
+                "新建提交（多页归组）：页数={}，页序={:?}，文件数={}，来源指纹={}，缺页={:?}，状态={:?}",
+                submission.pages.len(),
+                group.page_order,
+                group.file_count,
+                group
+                    .file_fingerprints
+                    .iter()
+                    .map(fingerprint_label)
+                    .collect::<Vec<_>>()
+                    .join(","),
+                group.missing_pages,
+                submission.status
+            ),
+            None => format!(
+                "新建提交：页数={}，状态={:?}",
+                submission.pages.len(),
+                submission.status
+            ),
+        };
         let mut entry =
             NewAuditEntry::new("submission.import", "submission", submission.id.to_string())
-                .with_note(format!(
-                    "新建提交：页数={}，状态={:?}",
-                    submission.pages.len(),
-                    submission.status
-                ));
+                .with_note(note);
         if let Some(task_id) = request.task_id {
             entry = entry.with_task(task_id);
         }
@@ -316,6 +346,15 @@ pub fn persist(
         key_assets: written.key_assets,
         task_advanced,
     })
+}
+
+/// 来源指纹的审计投影（12 位路径哈希 + 扩展名；不含路径/文件名原文）。
+fn fingerprint_label(fingerprint: &crate::event::SourceFingerprint) -> String {
+    if fingerprint.extension.is_empty() {
+        fingerprint.path_hash.clone()
+    } else {
+        format!("{}/{}", fingerprint.path_hash, fingerprint.extension)
+    }
 }
 
 /// 页面审计的结论与备注片段（备注不含文件名/身份信息）。

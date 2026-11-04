@@ -55,6 +55,42 @@ impl FixtureEntry {
     }
 }
 
+/// 读取并校验一个夹具记录文件（schema/键/输出形状）。
+///
+/// 供 [`FixtureStore::load_dir`] 与 `fixture_disk` 的目录加载器复用；
+/// 错误文案带文件路径，便于定位畸形夹具。
+pub(crate) fn read_entry_file(path: &Path) -> Result<FixtureEntry, InferenceError> {
+    let text = std::fs::read_to_string(path).map_err(|error| InferenceError::Internal {
+        detail: format!("无法读取夹具 {}：{error}", path.display()),
+    })?;
+    let raw: RawFixture =
+        serde_json::from_str(&text).map_err(|error| InferenceError::Internal {
+            detail: format!("夹具 {} 不是合法 JSON：{error}", path.display()),
+        })?;
+    if raw.schema_version != FIXTURE_SCHEMA_VERSION {
+        return Err(InferenceError::Internal {
+            detail: format!(
+                "夹具 {} 的 schema_version={} 不受支持",
+                path.display(),
+                raw.schema_version
+            ),
+        });
+    }
+    let key = Sha256Hex::from_hex(raw.key.trim()).map_err(|_| InferenceError::Internal {
+        detail: format!("夹具 {} 的 key 不是 64 位小写十六进制", path.display()),
+    })?;
+    let entry = FixtureEntry {
+        key,
+        model_id: raw.model_id,
+        model_version: raw.model_version,
+        prompt_schema_version: raw.prompt_schema_version,
+        output_raw: raw.output_raw,
+    };
+    // 输出必须是 JSON 对象（回放时仍返回原始字节，这里只做加载期校验）。
+    entry.output_value()?;
+    Ok(entry)
+}
+
 /// 夹具库（按输入哈希索引）。
 #[derive(Debug, Clone, Default)]
 pub struct FixtureStore {
@@ -105,34 +141,7 @@ impl FixtureStore {
             .collect();
         files.sort();
         for file in files {
-            let text =
-                std::fs::read_to_string(&file).map_err(|error| InferenceError::Internal {
-                    detail: format!("无法读取夹具 {}：{error}", file.display()),
-                })?;
-            let raw: RawFixture =
-                serde_json::from_str(&text).map_err(|error| InferenceError::Internal {
-                    detail: format!("夹具 {} 不是合法 JSON：{error}", file.display()),
-                })?;
-            if raw.schema_version != FIXTURE_SCHEMA_VERSION {
-                return Err(InferenceError::Internal {
-                    detail: format!(
-                        "夹具 {} 的 schema_version={} 不受支持",
-                        file.display(),
-                        raw.schema_version
-                    ),
-                });
-            }
-            let key =
-                Sha256Hex::from_hex(raw.key.trim()).map_err(|_| InferenceError::Internal {
-                    detail: format!("夹具 {} 的 key 不是 64 位小写十六进制", file.display()),
-                })?;
-            store.insert(FixtureEntry {
-                key,
-                model_id: raw.model_id,
-                model_version: raw.model_version,
-                prompt_schema_version: raw.prompt_schema_version,
-                output_raw: raw.output_raw,
-            })?;
+            store.insert(read_entry_file(&file)?)?;
         }
         Ok(store)
     }
@@ -220,6 +229,10 @@ pub struct FixtureBackend {
     model_id: String,
     model_version: String,
     prompt_schema_version: String,
+    /// 可选的外部夹具目录（组合键回退；`None` 时只认精确字节键）。
+    catalog: Option<std::sync::Arc<crate::fixture_disk::FixtureCatalog>>,
+    /// 回退时限定角色（OCR/judge 的提示词/输入互不相同）。
+    role: Option<crate::fixture_disk::FixtureRole>,
 }
 
 impl FixtureBackend {
@@ -236,7 +249,24 @@ impl FixtureBackend {
             model_id: model_id.into(),
             model_version: model_version.into(),
             prompt_schema_version: prompt_schema_version.into(),
+            catalog: None,
+            role: None,
         }
+    }
+
+    /// 挂接外部夹具目录：精确键未命中时按「角色 + prompt 哈希 + 输入资产哈希」回退。
+    ///
+    /// 用于跨进程 E2E：调用方注册表里的模型 id 与夹具录制时的 id 不同，
+    /// 但提示词/输入字节一致时仍可确定性回放（见 `fixture_disk` 文档的匹配优先级）。
+    #[must_use]
+    pub fn with_catalog(
+        mut self,
+        catalog: std::sync::Arc<crate::fixture_disk::FixtureCatalog>,
+        role: crate::fixture_disk::FixtureRole,
+    ) -> Self {
+        self.catalog = Some(catalog);
+        self.role = Some(role);
+        self
     }
 
     /// 后端 id（固定 `fixture`，便于上层识别夹具数据）。
@@ -274,12 +304,17 @@ impl FixtureBackend {
             input,
         );
         let key_text = key.to_hex();
-        let entry = self
-            .store
-            .get(&key_text)
-            .ok_or_else(|| InferenceError::FixtureMiss {
-                key: key_text.clone(),
-            })?;
+        let Some(entry) = self.store.get(&key_text) else {
+            // 精确键未命中：只有显式挂接外部目录时才按组合键回退（绝不猜）。
+            if let (Some(catalog), Some(role)) = (&self.catalog, self.role) {
+                let prompt_hash = Sha256Hex::of(prompt.as_bytes());
+                let asset_hash = Sha256Hex::of(input);
+                if let Some(replay) = catalog.try_combination(role, prompt_hash, asset_hash)? {
+                    return Ok(replay);
+                }
+            }
+            return Err(InferenceError::FixtureMiss { key: key_text });
+        };
         Ok(FixtureReplay {
             key,
             output_raw: entry.output_raw.clone(),

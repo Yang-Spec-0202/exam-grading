@@ -1331,6 +1331,7 @@ dependencies = [
 name = "eg-capture"
 version = "0.1.0"
 dependencies = [
+ "eg-align",
  "eg-domain",
  "eg-platform",
  "hayro",
@@ -1470,9 +1471,17 @@ name = "egctl"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "eg-align",
+ "eg-capture",
  "eg-domain",
+ "eg-grade",
+ "eg-inference",
  "eg-platform",
+ "eg-recognize",
  "eg-report",
+ "eg-review",
+ "eg-subject-math",
+ "image",
  "serde",
  "serde_json",
  "sha2",

@@ -32,3 +32,6 @@ thiserror = "2.0.21"
 
 [dev-dependencies]
 tempfile = "3.27.0"
+# 仅测试用：逐项比对「页码后缀/归一化」与 eg-align 的语义是否漂移
+# （库代码不依赖 align：capture 是上游，反向依赖会形成分层倒置；见 src/group.rs）。
+eg-align = { workspace = true }

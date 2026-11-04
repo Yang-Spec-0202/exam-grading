@@ -10,51 +10,14 @@
 //! 退出码：`0` = OK，`2` = WARN（可用但有降级/未就绪项），`1` = ERROR。
 //! 约定：**不伪造 OK**——未实现的模块/检查明确输出 WARN 并写明原因。
 
-#![cfg_attr(
-    test,
-    allow(
-        clippy::unwrap_used,
-        clippy::expect_used,
-        clippy::panic,
-        clippy::indexing_slicing
-    )
-)]
 #![allow(
     clippy::print_stdout,
     clippy::print_stderr,
-    clippy::format_push_string,
-    clippy::doc_markdown,
-    clippy::redundant_closure,
-    clippy::too_many_lines,
-    clippy::struct_excessive_bools,
-    clippy::option_if_let_else,
-    clippy::manual_let_else,
-    clippy::single_match_else,
-    clippy::significant_drop_tightening,
-    clippy::items_after_statements,
-    clippy::unreadable_literal,
-    clippy::uninlined_format_args,
-    clippy::needless_borrow,
-    clippy::if_not_else,
-    clippy::match_same_arms,
-    clippy::assigning_clones,
-    clippy::cast_precision_loss,
     clippy::unnecessary_wraps,
-    clippy::assert_is_empty,
-    unreachable_pub,
-    reason = "bin crate 只能向标准输出报告结果；内部模块无外部使用者；\
-              报告字符串拼接与中文术语不需要 pedantic 级别的风格改写"
+    reason = "CLI 入口需要向标准输出报告结果；子命令统一返回 Result<u8, String> 便于分发"
 )]
 
-mod bench;
-mod docs_check;
-mod doctor;
-mod fixture;
-mod registry;
-mod replay;
-mod service;
-mod util;
-
+use egctl::{bench, docs_check, doctor, replay, service, util};
 use std::path::PathBuf;
 use std::process::ExitCode;
 
@@ -80,6 +43,8 @@ enum Command {
     Restore(PathBuf),
     /// 导出诊断包。
     DiagnosticsExport,
+    /// S1 端到端自动化验收。
+    Acceptance,
 }
 
 /// 解析后的参数。
@@ -125,6 +90,7 @@ fn run() -> Result<u8, String> {
         Command::Backup => run_backup(&args),
         Command::Restore(dir) => run_restore(&args, dir),
         Command::DiagnosticsExport => run_diagnostics(&args),
+        Command::Acceptance => run_acceptance(&args),
     }
 }
 
@@ -244,6 +210,44 @@ fn run_docs_check(args: &Args) -> Result<u8, String> {
     Ok(exit_code(report.level()))
 }
 
+fn run_acceptance(args: &Args) -> Result<u8, String> {
+    let root = args.data_dir.clone().unwrap_or_else(|| {
+        std::env::temp_dir().join(format!("egctl-acceptance-{}", std::process::id()))
+    });
+    let fixtures = args.fixture.clone().or_else(|| {
+        let candidate = util::repo_root().join("fixtures/paper-20q");
+        candidate.is_dir().then_some(candidate)
+    });
+    let options = egctl::acceptance::Options {
+        fixtures,
+        data_dir: Some(root),
+        out: args.out.clone(),
+    };
+    let report = egctl::acceptance::run(&options);
+    if let Some(out) = &args.out {
+        if let Some(parent) = out.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        if let Err(error) = std::fs::write(
+            out,
+            serde_json::to_string_pretty(&report.to_json()).unwrap_or_default(),
+        ) {
+            eprintln!("警告：写入 --out 失败（{error}）；结果仍输出到标准输出");
+        } else {
+            println!("结果已写入 {}", out.display());
+        }
+    }
+    if args.json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&report.to_json()).unwrap_or_default()
+        );
+    } else {
+        print!("{}", report.render_human());
+    }
+    Ok(u8::from(!report.passed))
+}
+
 fn run_backup(args: &Args) -> Result<u8, String> {
     let dirs = util::resolve_dirs(args.data_dir.as_deref())?;
     let info = service::backup(&dirs)?;
@@ -334,7 +338,7 @@ fn parse_args() -> Result<Args, String> {
                         .ok_or_else(|| "--data-dir 需要一个目录参数".to_owned())?,
                 ));
             }
-            "--fixture" => {
+            "--fixture" | "--fixtures" => {
                 fixture = Some(PathBuf::from(
                     args.next()
                         .ok_or_else(|| "--fixture 需要一个目录参数".to_owned())?,
@@ -386,6 +390,7 @@ fn parse_args() -> Result<Args, String> {
         [one] if one == "bench" => Command::Bench,
         [one] if one == "backup" => Command::Backup,
         [one] if one == "version" => Command::Version,
+        [one] if one == "acceptance" => Command::Acceptance,
         [first, second] if first == "docs" && second == "check" => Command::DocsCheck,
         [first, second] if first == "diagnostics" && second == "export" => {
             Command::DiagnosticsExport
@@ -424,6 +429,7 @@ fn print_help() {
            backup                 手动备份数据库（需桌面端退出）\n\
            restore <备份目录>     从备份恢复数据库（需桌面端退出）\n\
            diagnostics export     导出诊断包（需桌面端退出）\n\
+           acceptance             S1 端到端自动化验收（fixtures→导入→识别→对齐→判分→复核→导出）\n\
            version / --version    版本\n\
          \n\
          全局选项：\n\
@@ -431,7 +437,7 @@ fn print_help() {
            --data-dir <目录>      覆盖数据根（默认按平台规则解析）\n\
            --deep                 doctor 额外执行 cargo check 检查其他 crate 编译状态\n\
            --max-sha-mib <MiB>    doctor 权重全量 SHA-256 阈值（默认 64）\n\
-           --fixture <目录>       replay 夹具目录（含 fixture.json）\n\
+           --fixtures <目录>      replay/acceptance 夹具目录（acceptance 默认 fixtures/paper-20q）\n\
            --out <目录>           replay 保留导出 / diagnostics 输出目录\n\
            --log-limit <条数>     diagnostics 日志条数上限（默认 2000）\n\
          \n\

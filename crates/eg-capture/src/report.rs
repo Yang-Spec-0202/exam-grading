@@ -1,6 +1,6 @@
 //! 导入报告（`SPEC-capture.md` §2「导入报告」、§5 指标）与导入种类。
 
-use eg_domain::{AssetId, SubmissionId, SubmissionStatus, Ulid};
+use eg_domain::{AssetId, Sha256Hex, SubmissionId, SubmissionStatus, Ulid};
 use serde::{Deserialize, Serialize};
 
 use crate::PIPELINE_VERSION;
@@ -10,7 +10,7 @@ use crate::event::SourceFingerprint;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ImportKind {
-    /// 学生作业：每份文件一个提交 + 若干页。
+    /// 学生作业：同一学生的多页文件归组为一个提交 + 若干页（单文件仍单页）。
     StudentWork,
     /// 参考答案页面（PDF/图片）：产出 `KeyPageAsset`，**不建模成 Page**。
     KeyReferencePages,
@@ -38,6 +38,66 @@ pub struct SubmissionSummary {
     pub page_count: u32,
     /// 提交状态（`Imported` 或 `Failed`）。
     pub status: SubmissionStatus,
+    /// 组键哈希（单文件组也有；不含姓名原文）。
+    pub group_key: Option<Sha256Hex>,
+    /// 本组参与归组的文件数（含失败文件）。
+    pub file_count: u32,
+    /// 最终页序（重编号后 1..=页数）。
+    pub page_order: Vec<u32>,
+}
+
+/// 归组警告码（不合并/页序不确定/缺页等；详情见 `GroupWarning.detail`）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GroupWarningCode {
+    /// 同一归一化 stem 出现在不同目录/来源：已分别成组，未合并（可能是不同学生）。
+    SameStemDifferentDirectory,
+    /// 无法从页码后缀确定页序：按文件名自然序稳定排序。
+    PageOrderFallback,
+    /// 组内出现重复页码（如 `_p1` 与 `_1` 同时存在）：页序不可判定。
+    DuplicatePageNumber,
+    /// 同一组内基名逐字不一致（如「张 三」与「张三」）：已合并但提示。
+    InconsistentStems,
+    /// 能确定页序时发现缺页（不从 1 开始或中间跳号）。
+    MissingPageRange,
+    /// 不同组出现逐字节相同的文件（批内去重保留首次，后者被跳过）。
+    CrossGroupDuplicateBytes,
+}
+
+/// 一条归组警告（脱敏：只有组键/指纹/数字）。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct GroupWarning {
+    /// 警告码。
+    pub code: GroupWarningCode,
+    /// 相关组键（跨组重复字节时为空）。
+    pub group_key: Option<Sha256Hex>,
+    /// 相关来源指纹（可空）。
+    pub fingerprint: Option<SourceFingerprint>,
+    /// 教师可读说明（不含姓名/路径原文）。
+    pub detail: String,
+}
+
+/// 一个归组（一个提交）的组信息（供 app 展示与审计；不含姓名/路径原文）。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct GroupSummary {
+    /// 组键哈希。
+    pub group_key: Sha256Hex,
+    /// 生成的提交 id。
+    pub submission_id: SubmissionId,
+    /// 页数（重编号后的 `Page.page_no` 个数）。
+    pub page_count: u32,
+    /// 参与归组的文件数（含失败/被拒文件）。
+    pub file_count: u32,
+    /// 最终页序（1..=页数）。
+    pub page_order: Vec<u32>,
+    /// 页码后缀序列（与文件顺序对应；供报告展示页序依据，不含文件名）。
+    pub suffix_pages: Vec<Option<u32>>,
+    /// 确定页序时可判定的缺页。
+    pub missing_pages: Vec<u32>,
+    /// 组内警告。
+    pub warnings: Vec<GroupWarningCode>,
+    /// 来源指纹（按组内文件顺序；脱敏）。
+    pub file_fingerprints: Vec<SourceFingerprint>,
 }
 
 /// 文件级失败（原因码 + 中文消息）。
@@ -102,6 +162,10 @@ pub struct ImportReport {
     pub rejected_pages: Vec<RejectedPage>,
     /// 重复命中列表。
     pub duplicates: Vec<DuplicateHit>,
+    /// 归组摘要（每个新建提交一条；单文件组也有一条）。
+    pub groups: Vec<GroupSummary>,
+    /// 归组警告（跨组/页序/缺页等，教师可见）。
+    pub group_warnings: Vec<GroupWarning>,
     /// 是否部分成功（有失败文件或拒收页，且不是全部失败）。
     pub partial_success: bool,
     /// 是否被取消。
@@ -140,6 +204,8 @@ impl ImportReport {
             kind,
             submissions: Vec::new(),
             key_assets: Vec::new(),
+            groups: Vec::new(),
+            group_warnings: Vec::new(),
             file_failures: Vec::new(),
             rejected_pages: Vec::new(),
             duplicates: Vec::new(),

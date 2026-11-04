@@ -22,6 +22,7 @@ use crate::util::{
 };
 
 /// doctor 选项。
+#[derive(Debug)]
 pub struct Options<'a> {
     /// 数据目录。
     pub dirs: &'a DataDirs,

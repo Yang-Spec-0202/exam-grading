@@ -10,6 +10,9 @@
 //! - 资产字节经 [`AssetSink`] 端口交给 `platform` 资产库（内容寻址、幂等）；
 //!   业务行落库由 [`persist::persist`] 在**单个 `platform::db.write` 事务**内完成
 //!   （D1：capture 直接依赖 `eg-platform` 的 db/repo/audit，不新增抽象层）。
+//! - 多页归组：同目录、同 `source_stem`（去 `_p1/p1/page1/_2/第N页` 后缀、按 `align`
+//!   同语义归一）的多文件 → 一个 `Submission` 多 `Page`；页序不可判定时按文件名自然序并
+//!   `group_warnings` 显式提示；缺页提交 `Failed{Capture}`（规则见 `src/group.rs`）。
 //! - 被拒页面**不进** `recognize`；质量门禁优先于自动化。
 //! - 事件/报告不得出现文件路径原文、学生姓名或学号：来源只以 [`SourceFingerprint`]
 //!   （路径哈希前 12 位 + 扩展名）表示。
@@ -65,6 +68,7 @@ pub mod detect;
 pub mod error;
 pub mod event;
 pub mod exif;
+pub mod group;
 pub mod imageops;
 pub mod import;
 pub mod media;
@@ -101,8 +105,8 @@ pub use pipeline::{
 };
 pub use quality::{QualityAssessment, QualityMetrics, assess, classify, measure};
 pub use report::{
-    DuplicateCategory, DuplicateHit, FileFailure, ImportKind, ImportReport, KeyAssetSummary,
-    RejectedPage, SubmissionSummary,
+    DuplicateCategory, DuplicateHit, FileFailure, GroupSummary, GroupWarning, GroupWarningCode,
+    ImportKind, ImportReport, KeyAssetSummary, RejectedPage, SubmissionSummary,
 };
 pub use settings::{ImportSettings, RejectBehavior};
 pub use sink::{AssetSink, LocalDirAssetSink, MemoryAssetSink, PutResult};

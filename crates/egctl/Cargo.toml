@@ -11,13 +11,20 @@ workspace = true
 
 [dependencies]
 chrono = { version = "0.4.45", default-features = false, features = ["std"] }
+eg-align = { workspace = true }
+eg-capture = { workspace = true }
 eg-domain = { workspace = true }
+eg-grade = { workspace = true }
+eg-inference = { workspace = true }
 eg-platform = { workspace = true }
+eg-recognize = { workspace = true }
 eg-report = { workspace = true }
+eg-review = { workspace = true }
+eg-subject-math = { workspace = true }
+image = { version = "0.25.10", default-features = false, features = ["png"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.11.1"
 toml = "1"
-# TODO(egctl, task-45)：`eg-grade` / `eg-capture` / `eg-align` / `eg-recognize` / `eg-app` 在并行收尾，
-# 且 eg-inference 当前未通过编译（platform `ConsentState::Exhausted` 未匹配），
-# 因此本 crate 不链接这些模块；相关子命令输出 WARN 而非伪造 OK（见 docs/dev/research/egctl.md）。
+# 说明：acceptance 子命令直接驱动 capture/recognize/align/grade/review/report 的真实流水线，
+# 以 fixture 后端替代真实模型（不联网）；eg-app 仍只经 `--bench` 子进程调用（见 docs/dev/research/egctl.md）。

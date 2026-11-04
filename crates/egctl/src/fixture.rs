@@ -16,6 +16,7 @@ use eg_report::{
 };
 
 /// 批次时间（回放/命名固定值）。
+#[must_use]
 pub fn fixture_time() -> Timestamp {
     Utc.with_ymd_and_hms(2026, 11, 3, 9, 0, 0)
         .single()

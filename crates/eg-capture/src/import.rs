@@ -3,20 +3,22 @@
 //! 职责：批次上限校验 → 逐文件读字节 → 批内去重 → 调用 [`Pipeline`] → 建 `Submission`
 //! 或参考答案资产 → 汇总 [`ImportReport`] → 送事件。**文件级失败不拖垮批次**。
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use eg_domain::{
-    ClassroomId, ContentHash, Page, PaperId, Stage, Submission, SubmissionId, SubmissionStatus,
-    Timestamp, Ulid,
+    AssetId, ClassroomId, ContentHash, Page, PaperId, Sha256Hex, Stage, Submission, SubmissionId,
+    SubmissionStatus, Timestamp, Ulid,
 };
 
 use crate::dedup::{self, BatchDedupe, KnownSubmissions};
 use crate::error::CaptureError;
 use crate::event::{ImportEvent, ImportEventSink, SourceFingerprint};
+use crate::group;
 use crate::pipeline::{CancelCheck, ClockPort, IdPort, Pipeline, PreparedFile, PreparedKeyAsset};
 use crate::report::{
-    DuplicateCategory, DuplicateHit, FileFailure, ImportKind, ImportReport, KeyAssetSummary,
-    RejectedPage, SubmissionSummary,
+    DuplicateCategory, DuplicateHit, FileFailure, GroupSummary, GroupWarning, GroupWarningCode,
+    ImportKind, ImportReport, KeyAssetSummary, RejectedPage, SubmissionSummary,
 };
 use crate::settings::ImportSettings;
 use crate::sink::AssetSink;
@@ -66,6 +68,18 @@ impl FileInput {
         self.file_name
             .rsplit_once('.')
             .map_or_else(|| self.file_name.clone(), |(stem, _)| stem.to_owned())
+    }
+
+    /// 来源目录键（路径输入的父目录哈希；内存输入为 `None`）。
+    ///
+    /// 仅用于多页归组判别「不同目录同名」，不含路径原文、不落报告。
+    pub fn directory_key(&self) -> Option<String> {
+        match &self.source {
+            InputSource::Bytes(_) => None,
+            InputSource::Path(path) => path
+                .parent()
+                .map(|parent| Sha256Hex::of(parent.to_string_lossy().as_bytes()).to_hex()),
+        }
     }
 
     fn read(&self) -> Result<Vec<u8>, CaptureError> {
@@ -148,6 +162,15 @@ impl ImportOutcome {
     }
 }
 
+/// 已读入并完成批内去重的待处理文件。
+struct ReadyFile {
+    file_name: String,
+    source_stem: String,
+    directory_key: Option<String>,
+    bytes: Vec<u8>,
+    fingerprint: SourceFingerprint,
+}
+
 /// 批次导入器（端口注入；`platform` 接入见 `platform_bridge`）。
 pub struct Importer<'a> {
     settings: &'a ImportSettings,
@@ -227,11 +250,12 @@ impl<'a> Importer<'a> {
             self.cancel,
         );
         let mut dedupe = BatchDedupe::new();
-        let mut submissions: Vec<Submission> = Vec::new();
-        let mut key_assets: Vec<PreparedKeyAsset> = Vec::new();
-        let mut batch_page_sets: Vec<dedup::SubmissionFingerprint> = Vec::new();
+        let mut first_group_by_content: HashMap<ContentHash, (Sha256Hex, bool)> = HashMap::new();
+        let mut ready: Vec<ReadyFile> = Vec::new();
+        let mut completed: usize = 0;
 
-        for (index, file) in request.files.iter().enumerate() {
+        // 阶段 1：读字节 + 批内去重（同字节只处理一次，保持既有语义与事件顺序）。
+        for file in &request.files {
             if self.cancel.is_cancelled() {
                 report.cancelled = true;
                 break;
@@ -247,7 +271,8 @@ impl<'a> Importer<'a> {
                         code: error.code(),
                         message: error.to_string(),
                     });
-                    self.progress(&mut report, index + 1, files_total);
+                    completed += 1;
+                    self.progress(&mut report, completed, files_total);
                     continue;
                 }
             };
@@ -257,14 +282,33 @@ impl<'a> Importer<'a> {
                 byte_len: bytes.len() as u64,
             });
             let content_hash = ContentHash::of(&bytes);
-            if let Some(previous) = dedupe.hit(content_hash) {
-                // 同批重复：只处理一次，其余只记录（不重复写资产/不重复建页）。
+            let source_stem = file.source_stem();
+            let group_key = group::stem_group_key(&source_stem, file.directory_key().as_deref());
+            let has_page_suffix = group::page_suffix(&source_stem).1.is_some();
+            if dedupe.hit(content_hash).is_some() {
+                // 同批重复：只处理一次；若两个**带页码**的文件属于不同组，显式告知教师
+                // （无页码的重复文件无法判定归属，例如同一页的副本，不告警）。
+                if let Some((first_group, first_had_suffix)) =
+                    first_group_by_content.get(&content_hash)
+                    && first_had_suffix == &has_page_suffix
+                    && has_page_suffix
+                    && *first_group != group_key
+                {
+                    report.group_warnings.push(GroupWarning {
+                        code: GroupWarningCode::CrossGroupDuplicateBytes,
+                        group_key: Some(group_key),
+                        fingerprint: Some(fingerprint.clone()),
+                        detail:
+                            "不同组出现逐字节相同的带页码文件：按批内去重保留首次，后者未建页；\
+                                 若是不同学生的相同页请检查来源"
+                                .to_owned(),
+                    });
+                }
                 report.duplicates.push(DuplicateHit {
                     fingerprint: fingerprint.clone(),
                     category: DuplicateCategory::SameBatch,
-                    asset: eg_domain::AssetId::of(&bytes),
+                    asset: AssetId::of(&bytes),
                 });
-                let _ = previous;
                 report.files_ok += 1;
                 self.emit(ImportEvent::FileFinished {
                     batch_id: request.batch_id,
@@ -273,110 +317,56 @@ impl<'a> Importer<'a> {
                     submission_id: None,
                     has_rejected: false,
                 });
-                self.progress(&mut report, index + 1, files_total);
+                completed += 1;
+                self.progress(&mut report, completed, files_total);
                 continue;
             }
             dedupe.record(content_hash, fingerprint.clone());
-            let submission_id = if request.kind == ImportKind::StudentWork {
-                Some(SubmissionId::from_ulid(self.ids.next_ulid()?))
-            } else {
-                None
-            };
-            let prepared = match pipeline.prepare(
-                &file.file_name,
-                &bytes,
-                request.kind,
-                &fingerprint,
-                submission_id,
-            ) {
-                Ok(prepared) => prepared,
-                Err(error) => {
-                    self.record_file_failure(&mut report, &fingerprint, &error);
-                    self.emit(ImportEvent::FileFailed {
-                        batch_id: request.batch_id,
-                        fingerprint,
-                        code: error.code(),
-                        message: error.to_string(),
-                    });
-                    self.progress(&mut report, index + 1, files_total);
-                    continue;
-                }
-            };
-            if prepared.source_deduped {
-                report.duplicates.push(DuplicateHit {
-                    fingerprint: fingerprint.clone(),
-                    category: DuplicateCategory::Historical,
-                    asset: prepared.file_asset,
-                });
-            }
+            first_group_by_content.insert(content_hash, (group_key, has_page_suffix));
+            ready.push(ReadyFile {
+                file_name: file.file_name.clone(),
+                source_stem: file.source_stem(),
+                directory_key: file.directory_key(),
+                bytes,
+                fingerprint,
+            });
+        }
+
+        let mut submissions: Vec<Submission> = Vec::new();
+        let mut key_assets: Vec<PreparedKeyAsset> = Vec::new();
+        let mut batch_page_sets: Vec<dedup::SubmissionFingerprint> = Vec::new();
+        if !report.cancelled {
             match request.kind {
                 ImportKind::StudentWork => {
-                    let Some(submission_id) = submission_id else {
-                        continue;
-                    };
-                    if self.is_suspected_duplicate(
-                        &prepared,
-                        &batch_page_sets,
-                        &request.options,
-                        &mut report,
-                        &fingerprint,
-                    ) {
-                        report.files_ok += 1;
-                        self.emit(ImportEvent::FileFinished {
-                            batch_id: request.batch_id,
-                            fingerprint,
-                            page_count: 0,
-                            submission_id: None,
-                            has_rejected: false,
-                        });
-                        self.progress(&mut report, index + 1, files_total);
-                        continue;
-                    }
-                    let (submission, summary) = self.build_submission(
+                    self.process_student_groups(
                         &request,
-                        submission_id,
-                        &prepared,
-                        &fingerprint,
+                        &pipeline,
+                        &ready,
+                        &mut completed,
                         &mut report,
+                        &mut submissions,
+                        &mut batch_page_sets,
                     )?;
-                    batch_page_sets.push(dedup::SubmissionFingerprint {
-                        submission_id: submission.id,
-                        pages: submission.pages.iter().map(|page| page.asset).collect(),
-                    });
-                    report.files_ok += 1;
-                    report.submissions.push(summary);
-                    self.emit(ImportEvent::FileFinished {
-                        batch_id: request.batch_id,
-                        fingerprint,
-                        page_count: u32::try_from(submission.pages.len()).unwrap_or(u32::MAX),
-                        submission_id: Some(submission.id.as_ulid()),
-                        has_rejected: prepared.has_rejected(),
-                    });
-                    submissions.push(submission);
                 }
                 ImportKind::KeyReferencePages => {
-                    for asset in &prepared.key_assets {
-                        report.key_assets.push(KeyAssetSummary {
-                            page_no: asset.page_no,
-                            asset: Some(asset.source_asset),
-                            kind: "page",
-                            rotation_applied: asset.rotation_applied.degrees(),
-                        });
+                    for ready_file in &ready {
+                        if self.cancel.is_cancelled() {
+                            report.cancelled = true;
+                            break;
+                        }
+                        self.process_reference_file(
+                            &request,
+                            &pipeline,
+                            ready_file,
+                            &mut report,
+                            &mut key_assets,
+                        );
+                        completed += 1;
+                        self.progress(&mut report, completed, files_total);
                     }
-                    report.files_ok += 1;
-                    report.pages_total += u32::try_from(prepared.key_assets.len()).unwrap_or(0);
-                    key_assets.extend(prepared.key_assets.clone());
-                    self.emit(ImportEvent::FileFinished {
-                        batch_id: request.batch_id,
-                        fingerprint,
-                        page_count: u32::try_from(prepared.key_assets.len()).unwrap_or(0),
-                        submission_id: None,
-                        has_rejected: false,
-                    });
                 }
                 ImportKind::KeyReferenceText => {}
             }
-            self.progress(&mut report, index + 1, files_total);
         }
 
         let end = self.clock.now();
@@ -384,7 +374,8 @@ impl<'a> Importer<'a> {
         let any_failure = report.files_failed > 0
             || report.pages_failed > 0
             || report.pages_rejected > 0
-            || report.cancelled;
+            || report.cancelled
+            || !report.group_warnings.is_empty();
         let any_success = report.files_ok > 0;
         report.partial_success = any_failure && any_success;
         self.emit(ImportEvent::BatchFinished {
@@ -397,6 +388,316 @@ impl<'a> Importer<'a> {
             submissions,
             key_assets,
         })
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn process_student_groups(
+        &self,
+        request: &ImportRequest,
+        pipeline: &Pipeline<'_>,
+        ready: &[ReadyFile],
+        completed: &mut usize,
+        report: &mut ImportReport,
+        submissions: &mut Vec<Submission>,
+        batch_page_sets: &mut Vec<dedup::SubmissionFingerprint>,
+    ) -> Result<(), CaptureError> {
+        let inputs: Vec<group::GroupInput<'_>> = ready
+            .iter()
+            .enumerate()
+            .map(|(position, file)| group::GroupInput {
+                index: position,
+                file_name: &file.file_name,
+                source_stem: &file.source_stem,
+                directory_key: file.directory_key.as_deref(),
+            })
+            .collect();
+        let plan = group::plan(&inputs);
+        for warning in &plan.warnings {
+            report.group_warnings.push(GroupWarning {
+                code: warning.code,
+                group_key: Some(warning.group_key),
+                fingerprint: None,
+                detail: warning.detail.clone(),
+            });
+        }
+        let files_total = usize::try_from(report.files_total).unwrap_or(usize::MAX);
+        for planned in &plan.groups {
+            if self.cancel.is_cancelled() {
+                report.cancelled = true;
+                return Ok(());
+            }
+            for code in &planned.warnings {
+                report.group_warnings.push(GroupWarning {
+                    code: *code,
+                    group_key: Some(planned.group_key),
+                    fingerprint: None,
+                    detail: group_warning_detail(*code),
+                });
+            }
+            if !planned.missing_pages.is_empty() {
+                report.group_warnings.push(GroupWarning {
+                    code: GroupWarningCode::MissingPageRange,
+                    group_key: Some(planned.group_key),
+                    fingerprint: None,
+                    detail: format!(
+                        "可判定页序时发现缺页：缺少第 {:?} 页",
+                        planned.missing_pages
+                    ),
+                });
+            }
+            let submission_id = SubmissionId::from_ulid(self.ids.next_ulid()?);
+            let mut prepared: Vec<(usize, PreparedFile)> = Vec::new();
+            let mut failed_files: u32 = 0;
+            for planned_file in &planned.files {
+                if self.cancel.is_cancelled() {
+                    report.cancelled = true;
+                    return Ok(());
+                }
+                let ready = &ready[planned_file.index];
+                match pipeline.prepare(
+                    &ready.file_name,
+                    &ready.bytes,
+                    ImportKind::StudentWork,
+                    &ready.fingerprint,
+                    Some(submission_id),
+                ) {
+                    Ok(file) => prepared.push((planned_file.index, file)),
+                    Err(error) => {
+                        self.record_file_failure(report, &ready.fingerprint, &error);
+                        self.emit(ImportEvent::FileFailed {
+                            batch_id: request.batch_id,
+                            fingerprint: ready.fingerprint.clone(),
+                            code: error.code(),
+                            message: error.to_string(),
+                        });
+                        failed_files += 1;
+                        *completed += 1;
+                        self.progress(report, *completed, files_total);
+                    }
+                }
+            }
+            if prepared.is_empty() {
+                continue;
+            }
+            for (position, file) in &prepared {
+                if file.source_deduped {
+                    report.duplicates.push(DuplicateHit {
+                        fingerprint: ready[*position].fingerprint.clone(),
+                        category: DuplicateCategory::Historical,
+                        asset: file.file_asset,
+                    });
+                }
+            }
+
+            // 合并页并按最终页序重编号（`Page.page_no` 必须 1 起连续）。
+            let mut pages: Vec<Page> = Vec::new();
+            let mut rejected: Vec<(u32, Vec<&'static str>)> = Vec::new();
+            let mut page_failures: u32 = 0;
+            for (_, file) in &prepared {
+                for prepared_page in &file.pages {
+                    let mut page = prepared_page.page.clone();
+                    let page_no = u32::try_from(pages.len()).unwrap_or(u32::MAX) + 1;
+                    page.page_no = page_no;
+                    page.submission_id = submission_id;
+                    if !prepared_page.reasons.is_empty() {
+                        rejected.push((
+                            page_no,
+                            prepared_page
+                                .reasons
+                                .iter()
+                                .map(|reason| reason.code())
+                                .collect(),
+                        ));
+                    }
+                    pages.push(page);
+                }
+                page_failures += u32::try_from(file.page_failures.len()).unwrap_or(0);
+            }
+
+            let page_assets: Vec<AssetId> = pages.iter().map(|page| page.asset).collect();
+            let known = {
+                let mut known = self.known.page_sets();
+                known.extend_from_slice(batch_page_sets);
+                known
+            };
+            if let Some((_other, _overlap)) = dedup::suspicious_submission(&page_assets, &known) {
+                report.duplicates.push(DuplicateHit {
+                    fingerprint: ready[prepared[0].0].fingerprint.clone(),
+                    category: DuplicateCategory::SuspectedSubmission,
+                    asset: page_assets
+                        .first()
+                        .copied()
+                        .unwrap_or(prepared[0].1.file_asset),
+                });
+                if matches!(
+                    request.options.duplicate_policy,
+                    DuplicatePolicy::Ask | DuplicatePolicy::Skip
+                ) {
+                    report.files_ok += u32::try_from(prepared.len()).unwrap_or(u32::MAX);
+                    for (position, _file) in &prepared {
+                        self.emit(ImportEvent::FileFinished {
+                            batch_id: request.batch_id,
+                            fingerprint: ready[*position].fingerprint.clone(),
+                            page_count: 0,
+                            submission_id: None,
+                            has_rejected: false,
+                        });
+                        *completed += 1;
+                        self.progress(report, *completed, files_total);
+                    }
+                    continue;
+                }
+            }
+
+            let missing = planned.missing_pages.clone();
+            let status = if !rejected.is_empty()
+                || page_failures > 0
+                || failed_files > 0
+                || !missing.is_empty()
+            {
+                SubmissionStatus::Failed {
+                    stage: Stage::Capture,
+                    message: group_failure_message(
+                        &missing,
+                        &rejected,
+                        page_failures,
+                        failed_files,
+                    ),
+                }
+            } else {
+                SubmissionStatus::Imported
+            };
+            let submission = Submission {
+                id: submission_id,
+                paper_id: request.paper_id,
+                classroom_id: request.classroom_id,
+                student_id: None,
+                source_file_name: prepared[0].1.file_name.clone(),
+                source_stem: planned.base_stem.clone(),
+                pages: pages.clone(),
+                status: status.clone(),
+                created_at: self.clock.now(),
+            };
+            submission
+                .validate()
+                .map_err(|error| CaptureError::Internal(format!("提交校验失败：{error}")))?;
+
+            report.pages_total += u32::try_from(pages.len()).unwrap_or(u32::MAX);
+            report.pages_failed += page_failures;
+            for page in &pages {
+                match page.quality.verdict {
+                    eg_domain::QualityVerdict::Good => report.pages_good += 1,
+                    eg_domain::QualityVerdict::Acceptable => report.pages_acceptable += 1,
+                    eg_domain::QualityVerdict::Rejected { .. } => {}
+                }
+            }
+            for (page_no, reasons) in &rejected {
+                report.pages_rejected += 1;
+                report.rejected_pages.push(RejectedPage {
+                    submission_id: Some(submission_id),
+                    page_no: *page_no,
+                    reasons: reasons.clone(),
+                });
+            }
+            let page_order: Vec<u32> =
+                (1..=u32::try_from(pages.len()).unwrap_or(u32::MAX)).collect();
+            let file_fingerprints: Vec<SourceFingerprint> = planned
+                .files
+                .iter()
+                .map(|file| ready[file.index].fingerprint.clone())
+                .collect();
+            report.groups.push(GroupSummary {
+                group_key: planned.group_key,
+                submission_id,
+                page_count: u32::try_from(pages.len()).unwrap_or(u32::MAX),
+                file_count: u32::try_from(planned.files.len()).unwrap_or(u32::MAX),
+                page_order: page_order.clone(),
+                suffix_pages: planned.suffix_pages.clone(),
+                missing_pages: missing.clone(),
+                warnings: planned.warnings.clone(),
+                file_fingerprints,
+            });
+            report.submissions.push(SubmissionSummary {
+                submission_id,
+                page_count: u32::try_from(pages.len()).unwrap_or(u32::MAX),
+                status,
+                group_key: Some(planned.group_key),
+                file_count: u32::try_from(planned.files.len()).unwrap_or(u32::MAX),
+                page_order,
+            });
+            report.files_ok += u32::try_from(prepared.len()).unwrap_or(u32::MAX);
+            batch_page_sets.push(dedup::SubmissionFingerprint {
+                submission_id,
+                pages: page_assets,
+            });
+            submissions.push(submission);
+            for (position, file) in &prepared {
+                self.emit(ImportEvent::FileFinished {
+                    batch_id: request.batch_id,
+                    fingerprint: ready[*position].fingerprint.clone(),
+                    page_count: u32::try_from(file.pages.len()).unwrap_or(u32::MAX),
+                    submission_id: Some(submission_id.as_ulid()),
+                    has_rejected: file.has_rejected() || !file.page_failures.is_empty(),
+                });
+                *completed += 1;
+                self.progress(report, *completed, files_total);
+            }
+        }
+        Ok(())
+    }
+
+    fn process_reference_file(
+        &self,
+        request: &ImportRequest,
+        pipeline: &Pipeline<'_>,
+        ready: &ReadyFile,
+        report: &mut ImportReport,
+        key_assets: &mut Vec<PreparedKeyAsset>,
+    ) {
+        let prepared = match pipeline.prepare(
+            &ready.file_name,
+            &ready.bytes,
+            ImportKind::KeyReferencePages,
+            &ready.fingerprint,
+            None,
+        ) {
+            Ok(prepared) => prepared,
+            Err(error) => {
+                self.record_file_failure(report, &ready.fingerprint, &error);
+                self.emit(ImportEvent::FileFailed {
+                    batch_id: request.batch_id,
+                    fingerprint: ready.fingerprint.clone(),
+                    code: error.code(),
+                    message: error.to_string(),
+                });
+                return;
+            }
+        };
+        if prepared.source_deduped {
+            report.duplicates.push(DuplicateHit {
+                fingerprint: ready.fingerprint.clone(),
+                category: DuplicateCategory::Historical,
+                asset: prepared.file_asset,
+            });
+        }
+        for asset in &prepared.key_assets {
+            report.key_assets.push(KeyAssetSummary {
+                page_no: asset.page_no,
+                asset: Some(asset.source_asset),
+                kind: "page",
+                rotation_applied: asset.rotation_applied.degrees(),
+            });
+        }
+        report.files_ok += 1;
+        report.pages_total += u32::try_from(prepared.key_assets.len()).unwrap_or(0);
+        key_assets.extend(prepared.key_assets.clone());
+        self.emit(ImportEvent::FileFinished {
+            batch_id: request.batch_id,
+            fingerprint: ready.fingerprint.clone(),
+            page_count: u32::try_from(prepared.key_assets.len()).unwrap_or(0),
+            submission_id: None,
+            has_rejected: false,
+        });
     }
 
     fn emit(&self, event: ImportEvent) {
@@ -424,105 +725,55 @@ impl<'a> Importer<'a> {
             total: u32::try_from(total).unwrap_or(u32::MAX),
         });
     }
-
-    fn is_suspected_duplicate(
-        &self,
-        prepared: &PreparedFile,
-        batch_page_sets: &[dedup::SubmissionFingerprint],
-        options: &ImportOptions,
-        report: &mut ImportReport,
-        fingerprint: &SourceFingerprint,
-    ) -> bool {
-        let page_assets: Vec<eg_domain::AssetId> =
-            prepared.pages.iter().map(|page| page.page.asset).collect();
-        let mut known = self.known.page_sets();
-        known.extend_from_slice(batch_page_sets);
-        let Some((submission_id, overlap)) = dedup::suspicious_submission(&page_assets, &known)
-        else {
-            return false;
-        };
-        // 记录疑似重复（提示开关关闭时只记录不弹窗；不静默建档）。
-        let _ = submission_id;
-        let _ = overlap;
-        report.duplicates.push(DuplicateHit {
-            fingerprint: fingerprint.clone(),
-            category: DuplicateCategory::SuspectedSubmission,
-            asset: page_assets.first().copied().unwrap_or(prepared.file_asset),
-        });
-        matches!(
-            options.duplicate_policy,
-            DuplicatePolicy::Ask | DuplicatePolicy::Skip
-        )
-    }
-
-    fn build_submission(
-        &self,
-        request: &ImportRequest,
-        submission_id: SubmissionId,
-        prepared: &PreparedFile,
-        _fingerprint: &SourceFingerprint,
-        report: &mut ImportReport,
-    ) -> Result<(Submission, SubmissionSummary), CaptureError> {
-        let pages: Vec<Page> = prepared
-            .pages
-            .iter()
-            .map(|page| page.page.clone())
-            .collect();
-        let rejected = prepared.has_rejected() || !prepared.page_failures.is_empty();
-        let status = if rejected {
-            let message = rejection_message(prepared);
-            SubmissionStatus::Failed {
-                stage: Stage::Capture,
-                message,
-            }
-        } else {
-            SubmissionStatus::Imported
-        };
-        let submission = Submission {
-            id: submission_id,
-            paper_id: request.paper_id,
-            classroom_id: request.classroom_id,
-            student_id: None,
-            source_file_name: prepared.file_name.clone(),
-            source_stem: prepared.source_stem.clone(),
-            pages,
-            status,
-            created_at: self.clock.now(),
-        };
-        submission
-            .validate()
-            .map_err(|e| CaptureError::Internal(format!("提交校验失败：{e}")))?;
-        // 统计页面结论。
-        for page in &prepared.pages {
-            report.pages_total += 1;
-            match page.page.quality.verdict {
-                eg_domain::QualityVerdict::Good => report.pages_good += 1,
-                eg_domain::QualityVerdict::Acceptable => report.pages_acceptable += 1,
-                eg_domain::QualityVerdict::Rejected { .. } => {
-                    report.pages_rejected += 1;
-                    report.rejected_pages.push(RejectedPage {
-                        submission_id: Some(submission_id),
-                        page_no: page.page.page_no,
-                        reasons: page.reasons.iter().map(|reason| reason.code()).collect(),
-                    });
-                }
-            }
-        }
-        report.pages_failed += u32::try_from(prepared.page_failures.len()).unwrap_or(0);
-        let summary = SubmissionSummary {
-            submission_id,
-            page_count: u32::try_from(submission.pages.len()).unwrap_or(u32::MAX),
-            status: submission.status.clone(),
-        };
-        Ok((submission, summary))
-    }
 }
 
-fn rejection_message(prepared: &PreparedFile) -> String {
-    if prepared.page_failures.is_empty() {
-        "存在被拒页面（质量未通过），请补拍或重新导入该页".to_owned()
-    } else {
-        "存在处理失败的页面，请重新导入".to_owned()
+fn group_failure_message(
+    missing: &[u32],
+    rejected: &[(u32, Vec<&'static str>)],
+    failed_pages: u32,
+    failed_files: u32,
+) -> String {
+    let mut parts: Vec<String> = Vec::new();
+    if !missing.is_empty() {
+        parts.push(format!("缺页（缺少第 {missing:?} 页）"));
+    }
+    if !rejected.is_empty() {
+        let pages: Vec<u32> = rejected.iter().map(|(page, _)| *page).collect();
+        parts.push(format!("存在被拒页面（第 {pages:?} 页，质量未通过）"));
+    }
+    if failed_pages > 0 {
+        parts.push(format!("存在处理失败页面 {failed_pages} 页"));
+    }
+    if failed_files > 0 {
+        parts.push(format!("存在未成功解码的文件 {failed_files} 个"));
+    }
+    if parts.is_empty() {
+        parts.push("存在未完成页面".to_owned());
+    }
+    format!(
+        "多页归组未完整：{}；请补齐/补拍后重新导入",
+        parts.join("，")
+    )
+}
+
+fn group_warning_detail(code: GroupWarningCode) -> String {
+    match code {
+        GroupWarningCode::SameStemDifferentDirectory => {
+            "同一归一化文件名基名出现在不同目录：已分别成组，未合并".to_owned()
+        }
+        GroupWarningCode::PageOrderFallback => {
+            "无法从页码后缀确定页序：已按文件名自然序稳定排序".to_owned()
+        }
+        GroupWarningCode::DuplicatePageNumber => {
+            "组内页码重复：页序不可判定，已按文件名自然序稳定排序".to_owned()
+        }
+        GroupWarningCode::InconsistentStems => {
+            "组内文件名基名拼写不一致（大小写/空格等）：已合并，请确认是同一学生".to_owned()
+        }
+        GroupWarningCode::MissingPageRange => "可判定页序时发现缺页".to_owned(),
+        GroupWarningCode::CrossGroupDuplicateBytes => {
+            "不同组出现逐字节相同文件：批内去重保留首次".to_owned()
+        }
     }
 }
 

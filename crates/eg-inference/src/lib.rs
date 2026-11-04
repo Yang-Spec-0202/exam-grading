@@ -58,6 +58,7 @@ pub mod call;
 pub mod consent;
 pub mod error;
 pub mod fixture;
+pub mod fixture_disk;
 pub mod http;
 pub mod license;
 pub mod local;
@@ -78,6 +79,10 @@ pub use consent::{
 pub use error::{FailureClass, InferenceError};
 pub use fixture::{
     FIXTURE_SCHEMA_VERSION, FixtureBackend, FixtureEntry, FixtureReplay, FixtureStore, fixture_key,
+};
+pub use fixture_disk::{
+    FIXTURE_INDEX_SCHEMA_VERSION, FixtureBackendIds, FixtureCatalog, FixtureLookup, FixtureRole,
+    LoadedFixture, LoadedNegative, PageIdentity, QuestionIdentity,
 };
 pub use http::{HttpMethod, HttpRequest, HttpResponse, TcpTransport, Transport};
 pub use license::{LicensePolicy, LicenseVerdict, LicenseViolation};
