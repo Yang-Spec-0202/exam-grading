@@ -1,0 +1,192 @@
+{
+  "schema_version": 1,
+  "note": "合成印刷体答卷页（非真实手写）；期望值为 capture/align 的可验证结论。",
+  "page_width": 2480,
+  "page_height": 3507,
+  "files": [
+    {
+      "file": "images/张三_p1.png",
+      "sha256": "275fefebf92d7b6210a520d301fe496bc24d6dbde861ed0b7957b9ea056b9ef3",
+      "bytes": 94722,
+      "media_type": "image/png",
+      "width": 2480,
+      "height": 3507,
+      "expected": {
+        "kind": "student_page",
+        "format": "png",
+        "source_stem": "张三_p1",
+        "identity": "confirmed",
+        "identity_student_no": "SO2026-001",
+        "page_no": 1,
+        "exif_orientation": 0,
+        "rotation_applied": 0,
+        "duplicate": "unique",
+        "quality_verdict": "good_or_acceptable"
+      }
+    },
+    {
+      "file": "images/张三_p2.png",
+      "sha256": "358e9deca145ecb1779e6e03405b28301d7e7fc77c30e978293dcb633a975724",
+      "bytes": 169241,
+      "media_type": "image/png",
+      "width": 2480,
+      "height": 3507,
+      "expected": {
+        "kind": "student_page",
+        "format": "png",
+        "source_stem": "张三_p2",
+        "identity": "confirmed",
+        "identity_student_no": "SO2026-001",
+        "page_no": 2,
+        "exif_orientation": 0,
+        "rotation_applied": 0,
+        "duplicate": "unique",
+        "quality_verdict": "good_or_acceptable"
+      }
+    },
+    {
+      "file": "images/李四_期中_p1.jpg",
+      "sha256": "5b799a219dccbd2e801bffa8cd3e12347e2e369fc862a14271676a7bbfb29af5",
+      "bytes": 211313,
+      "media_type": "image/jpeg",
+      "width": 2480,
+      "height": 3507,
+      "expected": {
+        "kind": "student_page",
+        "format": "jpg",
+        "source_stem": "李四_期中_p1",
+        "identity": "confirmed",
+        "identity_student_no": "SO2026-002",
+        "page_no": 1,
+        "exif_orientation": 0,
+        "rotation_applied": 0,
+        "duplicate": "unique",
+        "quality_verdict": "good_or_acceptable"
+      }
+    },
+    {
+      "file": "images/李四_期中_p2.jpg",
+      "sha256": "84432e10f0f813739c59037a730662466eacb1b6a5a81c092337a458829ea266",
+      "bytes": 262380,
+      "media_type": "image/jpeg",
+      "width": 2480,
+      "height": 3507,
+      "expected": {
+        "kind": "student_page",
+        "format": "jpg",
+        "source_stem": "李四_期中_p2",
+        "identity": "confirmed",
+        "identity_student_no": "SO2026-002",
+        "page_no": 2,
+        "exif_orientation": 0,
+        "rotation_applied": 0,
+        "duplicate": "unique",
+        "quality_verdict": "good_or_acceptable"
+      }
+    },
+    {
+      "file": "images/SO2026-003_p1.png",
+      "sha256": "59a03a766422c3939207bbf5d58d48359ec77298d96cfdeba6240cc245923a9a",
+      "bytes": 95676,
+      "media_type": "image/png",
+      "width": 2480,
+      "height": 3507,
+      "expected": {
+        "kind": "student_page",
+        "format": "png",
+        "source_stem": "SO2026-003_p1",
+        "identity": "confirmed",
+        "identity_student_no": "SO2026-003",
+        "page_no": 1,
+        "exif_orientation": 0,
+        "rotation_applied": 0,
+        "duplicate": "unique",
+        "quality_verdict": "good_or_acceptable"
+      }
+    },
+    {
+      "file": "images/SO2026-003_p2.png",
+      "sha256": "e8c6fa19f96c42f3c7960dabdfb36fb2e5f2a02ffd3311a9ca60397a31591e59",
+      "bytes": 182707,
+      "media_type": "image/png",
+      "width": 2480,
+      "height": 3507,
+      "expected": {
+        "kind": "student_page",
+        "format": "png",
+        "source_stem": "SO2026-003_p2",
+        "identity": "confirmed",
+        "identity_student_no": "SO2026-003",
+        "page_no": 2,
+        "exif_orientation": 0,
+        "rotation_applied": 0,
+        "duplicate": "unique",
+        "quality_verdict": "good_or_acceptable"
+      }
+    },
+    {
+      "file": "images/IMG_20261104_001.jpg",
+      "sha256": "36e7b7a007c233d0fca7487536e25bb1d10ad50d266b29d42ad339c19f10df76",
+      "bytes": 214376,
+      "media_type": "image/jpeg",
+      "width": 2480,
+      "height": 3507,
+      "expected": {
+        "kind": "irregular_name",
+        "format": "jpg",
+        "source_stem": "IMG_20261104_001",
+        "identity": "unresolved",
+        "identity_reason": "file_name_not_found",
+        "page_no": 1,
+        "exif_orientation": 0,
+        "rotation_applied": 0,
+        "duplicate": "unique",
+        "quality_verdict": "good_or_acceptable"
+      }
+    },
+    {
+      "file": "images/张三_p2-copy.png",
+      "sha256": "358e9deca145ecb1779e6e03405b28301d7e7fc77c30e978293dcb633a975724",
+      "bytes": 169241,
+      "media_type": "image/png",
+      "width": 2480,
+      "height": 3507,
+      "expected": {
+        "kind": "duplicate_bytes",
+        "format": "png",
+        "source_stem": "张三_p2-copy",
+        "identity": "confirmed",
+        "identity_student_no": "SO2026-001",
+        "page_no": 2,
+        "exif_orientation": 0,
+        "rotation_applied": 0,
+        "duplicate": "same_batch_duplicate",
+        "quality_verdict": "good_or_acceptable"
+      }
+    },
+    {
+      "file": "images/王五_exif6.jpg",
+      "sha256": "79507a60903ec6750004985a3b48357bacdc332c146b306c496e553cbe3dc94a",
+      "bytes": 295609,
+      "media_type": "image/jpeg",
+      "stored_width": 3507,
+      "stored_height": 2480,
+      "width": 3507,
+      "height": 2480,
+      "expected": {
+        "kind": "exif_rotated",
+        "format": "jpg",
+        "source_stem": "王五_exif6",
+        "identity": "confirmed",
+        "identity_student_no": "SO2026-003",
+        "page_no": 2,
+        "exif_orientation": 6,
+        "rotation_applied": 90,
+        "upright_width": 2480,
+        "upright_height": 3507,
+        "duplicate": "unique",
+        "quality_verdict": "good_or_acceptable"
+      }
+    }
+  ]
+}

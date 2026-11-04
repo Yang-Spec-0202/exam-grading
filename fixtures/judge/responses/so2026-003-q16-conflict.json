@@ -1,0 +1,8 @@
+{
+  "key": "cc1416f5e5e2fbe1ac906df6404d69f71a5d9d8a2ba6a9e91f09a0f98dd55749",
+  "model_id": "fixture-judge",
+  "model_version": "1.0",
+  "output_raw": "{\"judgement\":\"mismatch\",\"score_milli\":0,\"reason\":\"模型认为最终答案不一致（与规则判定冲突）\",\"confidence\":0.55,\"matched_alternative\":null,\"calibration_id\":null,\"satisfied\":[],\"missing\":[]}",
+  "prompt_schema_version": "judge.outcome.v1",
+  "schema_version": 1
+}

@@ -1,0 +1,8 @@
+{
+  "key": "d37c242b9e62006256f8993e0e19227236b1c68bfb170b708429ef5eaf25bb16",
+  "model_id": "fixture-ocr",
+  "model_version": "1.0",
+  "output_raw": "{\"schema_version\":1,\"blocks\":[{\"kind\":\"barcode\",\"bbox\":[0.1,0.1,0.2,0.05],\"text\":\"SO2026-001\"}]}",
+  "prompt_schema_version": "1",
+  "schema_version": 1
+}

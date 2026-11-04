@@ -1,0 +1,328 @@
+{
+  "schema_version": 1,
+  "paper_id": "00000000000000000000000001",
+  "key_version": 1,
+  "questions": [
+    {
+      "question_id": "000000000000000000000000Z9",
+      "ordinal": 1,
+      "kind": "single_choice",
+      "max_score_milli": 5000,
+      "answer_key": {
+        "concrete": {
+          "primary": {
+            "options": [
+              "A"
+            ]
+          },
+          "alternatives": [],
+          "comparators": []
+        }
+      }
+    },
+    {
+      "question_id": "000000000000000000000000ZA",
+      "ordinal": 2,
+      "kind": "single_choice",
+      "max_score_milli": 5000,
+      "answer_key": {
+        "concrete": {
+          "primary": {
+            "options": [
+              "B"
+            ]
+          },
+          "alternatives": [],
+          "comparators": []
+        }
+      }
+    },
+    {
+      "question_id": "000000000000000000000000ZB",
+      "ordinal": 3,
+      "kind": "single_choice",
+      "max_score_milli": 5000,
+      "answer_key": {
+        "concrete": {
+          "primary": {
+            "options": [
+              "C"
+            ]
+          },
+          "alternatives": [],
+          "comparators": []
+        }
+      }
+    },
+    {
+      "question_id": "000000000000000000000000ZC",
+      "ordinal": 4,
+      "kind": "single_choice",
+      "max_score_milli": 5000,
+      "answer_key": {
+        "concrete": {
+          "primary": {
+            "options": [
+              "D"
+            ]
+          },
+          "alternatives": [],
+          "comparators": []
+        }
+      }
+    },
+    {
+      "question_id": "000000000000000000000000ZD",
+      "ordinal": 5,
+      "kind": "single_choice",
+      "max_score_milli": 5000,
+      "answer_key": {
+        "concrete": {
+          "primary": {
+            "options": [
+              "A"
+            ]
+          },
+          "alternatives": [],
+          "comparators": []
+        }
+      }
+    },
+    {
+      "question_id": "000000000000000000000000ZE",
+      "ordinal": 6,
+      "kind": "single_choice",
+      "max_score_milli": 5000,
+      "answer_key": {
+        "concrete": {
+          "primary": {
+            "options": [
+              "B"
+            ]
+          },
+          "alternatives": [],
+          "comparators": []
+        }
+      }
+    },
+    {
+      "question_id": "000000000000000000000000ZF",
+      "ordinal": 7,
+      "kind": "single_choice",
+      "max_score_milli": 5000,
+      "answer_key": {
+        "concrete": {
+          "primary": {
+            "options": [
+              "C"
+            ]
+          },
+          "alternatives": [],
+          "comparators": []
+        }
+      }
+    },
+    {
+      "question_id": "000000000000000000000000ZG",
+      "ordinal": 8,
+      "kind": "single_choice",
+      "max_score_milli": 5000,
+      "answer_key": {
+        "concrete": {
+          "primary": {
+            "options": [
+              "D"
+            ]
+          },
+          "alternatives": [],
+          "comparators": []
+        }
+      }
+    },
+    {
+      "question_id": "000000000000000000000000ZH",
+      "ordinal": 9,
+      "kind": "multiple_choice",
+      "max_score_milli": 6000,
+      "answer_key": {
+        "concrete": {
+          "primary": {
+            "options": [
+              "A",
+              "C"
+            ]
+          },
+          "alternatives": [],
+          "comparators": []
+        }
+      }
+    },
+    {
+      "question_id": "000000000000000000000000ZJ",
+      "ordinal": 10,
+      "kind": "multiple_choice",
+      "max_score_milli": 6000,
+      "answer_key": {
+        "concrete": {
+          "primary": {
+            "options": [
+              "A",
+              "B",
+              "D"
+            ]
+          },
+          "alternatives": [],
+          "comparators": []
+        }
+      }
+    },
+    {
+      "question_id": "000000000000000000000000ZK",
+      "ordinal": 11,
+      "kind": "multiple_choice",
+      "max_score_milli": 6000,
+      "answer_key": {
+        "concrete": {
+          "primary": {
+            "options": [
+              "B",
+              "C"
+            ]
+          },
+          "alternatives": [],
+          "comparators": []
+        }
+      }
+    },
+    {
+      "question_id": "000000000000000000000000ZM",
+      "ordinal": 12,
+      "kind": "fill_in_blank",
+      "max_score_milli": 5000,
+      "answer_key": {
+        "concrete": {
+          "primary": {
+            "number": {
+              "value": "2.5",
+              "unit": null,
+              "tolerance": {
+                "absolute": "0.1",
+                "relative_ppm": null
+              }
+            }
+          },
+          "alternatives": [],
+          "comparators": []
+        }
+      }
+    },
+    {
+      "question_id": "000000000000000000000000ZN",
+      "ordinal": 13,
+      "kind": "fill_in_blank",
+      "max_score_milli": 5000,
+      "answer_key": {
+        "concrete": {
+          "primary": {
+            "number": {
+              "value": "-0.75",
+              "unit": null,
+              "tolerance": null
+            }
+          },
+          "alternatives": [],
+          "comparators": []
+        }
+      }
+    },
+    {
+      "question_id": "000000000000000000000000ZP",
+      "ordinal": 14,
+      "kind": "fill_in_blank",
+      "max_score_milli": 5000,
+      "answer_key": {
+        "concrete": {
+          "primary": {
+            "expression": "x^{2}-1"
+          },
+          "alternatives": [],
+          "comparators": []
+        }
+      }
+    },
+    {
+      "question_id": "000000000000000000000000ZQ",
+      "ordinal": 15,
+      "kind": "fill_in_blank",
+      "max_score_milli": 5000,
+      "answer_key": {
+        "concrete": {
+          "primary": {
+            "text": "正确"
+          },
+          "alternatives": [],
+          "comparators": []
+        }
+      }
+    },
+    {
+      "question_id": "000000000000000000000000ZR",
+      "ordinal": 16,
+      "kind": "calculation",
+      "max_score_milli": 13000,
+      "answer_key": {
+        "concrete": {
+          "primary": {
+            "number": {
+              "value": "12",
+              "unit": null,
+              "tolerance": null
+            }
+          },
+          "alternatives": [],
+          "comparators": []
+        }
+      }
+    },
+    {
+      "question_id": "000000000000000000000000ZS",
+      "ordinal": 17,
+      "kind": "calculation",
+      "max_score_milli": 15000,
+      "answer_key": "rubric_only"
+    },
+    {
+      "question_id": "000000000000000000000000ZT",
+      "ordinal": 18,
+      "kind": "calculation",
+      "max_score_milli": 17000,
+      "answer_key": {
+        "concrete": {
+          "primary": {
+            "expression": "2x+3"
+          },
+          "alternatives": [],
+          "comparators": []
+        }
+      }
+    },
+    {
+      "question_id": "000000000000000000000000ZV",
+      "ordinal": 19,
+      "kind": "proof",
+      "max_score_milli": 15000,
+      "answer_key": "rubric_only"
+    },
+    {
+      "question_id": "000000000000000000000000ZW",
+      "ordinal": 20,
+      "kind": "short_answer",
+      "max_score_milli": 12000,
+      "answer_key": {
+        "explicitly_omitted": {
+          "note": "略"
+        }
+      }
+    }
+  ]
+}

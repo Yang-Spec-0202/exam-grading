@@ -1,0 +1,8 @@
+{
+  "key": "0ce9cae0ffc172f1d375cc8f8bb6abcc5d9eb4fef7278bcdaa3825ccf3f5bdb5",
+  "model_id": "fixture-judge",
+  "model_version": "1.0",
+  "output_raw": "{\"judgement\":\"match\",\"score_milli\":15000,\"reason\":\"三个步骤均满足\",\"confidence\":0.96,\"matched_alternative\":null,\"calibration_id\":\"cal-fixture-1\",\"satisfied\":[],\"missing\":[]}",
+  "prompt_schema_version": "judge.outcome.v1",
+  "schema_version": 1
+}

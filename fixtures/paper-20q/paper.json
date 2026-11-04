@@ -1,0 +1,752 @@
+{
+  "id": "00000000000000000000000001",
+  "classroom_id": "00000000000000000000000002",
+  "title": "合成夹具·数学 20 题（印刷体）",
+  "subject": "math",
+  "total_score": 150000,
+  "questions": [
+    {
+      "id": "000000000000000000000000Z9",
+      "paper_id": "00000000000000000000000001",
+      "ordinal": 1,
+      "label": "1",
+      "kind": "single_choice",
+      "max_score": 5000,
+      "stem": null,
+      "key": {
+        "concrete": {
+          "primary": {
+            "options": [
+              "A"
+            ]
+          },
+          "alternatives": [],
+          "comparators": []
+        }
+      },
+      "rubric": null,
+      "subject_hint": "math",
+      "knowledge_tags": [
+        "集合"
+      ]
+    },
+    {
+      "id": "000000000000000000000000ZA",
+      "paper_id": "00000000000000000000000001",
+      "ordinal": 2,
+      "label": "2",
+      "kind": "single_choice",
+      "max_score": 5000,
+      "stem": null,
+      "key": {
+        "concrete": {
+          "primary": {
+            "options": [
+              "B"
+            ]
+          },
+          "alternatives": [],
+          "comparators": []
+        }
+      },
+      "rubric": null,
+      "subject_hint": "math",
+      "knowledge_tags": [
+        "函数"
+      ]
+    },
+    {
+      "id": "000000000000000000000000ZB",
+      "paper_id": "00000000000000000000000001",
+      "ordinal": 3,
+      "label": "3",
+      "kind": "single_choice",
+      "max_score": 5000,
+      "stem": null,
+      "key": {
+        "concrete": {
+          "primary": {
+            "options": [
+              "C"
+            ]
+          },
+          "alternatives": [],
+          "comparators": []
+        }
+      },
+      "rubric": null,
+      "subject_hint": "math",
+      "knowledge_tags": [
+        "函数"
+      ]
+    },
+    {
+      "id": "000000000000000000000000ZC",
+      "paper_id": "00000000000000000000000001",
+      "ordinal": 4,
+      "label": "4",
+      "kind": "single_choice",
+      "max_score": 5000,
+      "stem": null,
+      "key": {
+        "concrete": {
+          "primary": {
+            "options": [
+              "D"
+            ]
+          },
+          "alternatives": [],
+          "comparators": []
+        }
+      },
+      "rubric": null,
+      "subject_hint": "math",
+      "knowledge_tags": [
+        "三角"
+      ]
+    },
+    {
+      "id": "000000000000000000000000ZD",
+      "paper_id": "00000000000000000000000001",
+      "ordinal": 5,
+      "label": "5",
+      "kind": "single_choice",
+      "max_score": 5000,
+      "stem": null,
+      "key": {
+        "concrete": {
+          "primary": {
+            "options": [
+              "A"
+            ]
+          },
+          "alternatives": [],
+          "comparators": []
+        }
+      },
+      "rubric": null,
+      "subject_hint": "math",
+      "knowledge_tags": [
+        "数列"
+      ]
+    },
+    {
+      "id": "000000000000000000000000ZE",
+      "paper_id": "00000000000000000000000001",
+      "ordinal": 6,
+      "label": "6",
+      "kind": "single_choice",
+      "max_score": 5000,
+      "stem": null,
+      "key": {
+        "concrete": {
+          "primary": {
+            "options": [
+              "B"
+            ]
+          },
+          "alternatives": [],
+          "comparators": []
+        }
+      },
+      "rubric": null,
+      "subject_hint": "math",
+      "knowledge_tags": [
+        "数列"
+      ]
+    },
+    {
+      "id": "000000000000000000000000ZF",
+      "paper_id": "00000000000000000000000001",
+      "ordinal": 7,
+      "label": "7",
+      "kind": "single_choice",
+      "max_score": 5000,
+      "stem": null,
+      "key": {
+        "concrete": {
+          "primary": {
+            "options": [
+              "C"
+            ]
+          },
+          "alternatives": [],
+          "comparators": []
+        }
+      },
+      "rubric": null,
+      "subject_hint": "math",
+      "knowledge_tags": [
+        "向量"
+      ]
+    },
+    {
+      "id": "000000000000000000000000ZG",
+      "paper_id": "00000000000000000000000001",
+      "ordinal": 8,
+      "label": "8",
+      "kind": "single_choice",
+      "max_score": 5000,
+      "stem": null,
+      "key": {
+        "concrete": {
+          "primary": {
+            "options": [
+              "D"
+            ]
+          },
+          "alternatives": [],
+          "comparators": []
+        }
+      },
+      "rubric": null,
+      "subject_hint": "math",
+      "knowledge_tags": [
+        "立体几何"
+      ]
+    },
+    {
+      "id": "000000000000000000000000ZH",
+      "paper_id": "00000000000000000000000001",
+      "ordinal": 9,
+      "label": "9",
+      "kind": "multiple_choice",
+      "max_score": 6000,
+      "stem": null,
+      "key": {
+        "concrete": {
+          "primary": {
+            "options": [
+              "A",
+              "C"
+            ]
+          },
+          "alternatives": [],
+          "comparators": []
+        }
+      },
+      "rubric": {
+        "id": "000000000000000000000001YS",
+        "version": 1,
+        "items": [
+          {
+            "id": "0000000000000000000000030K",
+            "criterion": "全对给满分；按档位部分给分",
+            "points": 6000,
+            "required": true,
+            "depends_on": []
+          }
+        ],
+        "mode": "partial_choice",
+        "total": 6000,
+        "origin": {
+          "teacher_handwritten": {
+            "confirmed_by": "local-teacher",
+            "confirmed_at": "2026-11-04T00:00:00Z"
+          }
+        },
+        "partial_choice": {
+          "correct_option_count": 2,
+          "tiers": [
+            {
+              "selected_correct": 1,
+              "points": 3000,
+              "label": "选对 1 个"
+            }
+          ],
+          "wrong_selection_zero": true,
+          "source": "template_data",
+          "source_note": null,
+          "total_milli": 6000
+        }
+      },
+      "subject_hint": "math",
+      "knowledge_tags": [
+        "概率"
+      ]
+    },
+    {
+      "id": "000000000000000000000000ZJ",
+      "paper_id": "00000000000000000000000001",
+      "ordinal": 10,
+      "label": "10",
+      "kind": "multiple_choice",
+      "max_score": 6000,
+      "stem": null,
+      "key": {
+        "concrete": {
+          "primary": {
+            "options": [
+              "A",
+              "B",
+              "D"
+            ]
+          },
+          "alternatives": [],
+          "comparators": []
+        }
+      },
+      "rubric": {
+        "id": "000000000000000000000001YT",
+        "version": 1,
+        "items": [
+          {
+            "id": "0000000000000000000000030X",
+            "criterion": "全对给满分；按档位部分给分",
+            "points": 6000,
+            "required": true,
+            "depends_on": []
+          }
+        ],
+        "mode": "partial_choice",
+        "total": 6000,
+        "origin": {
+          "teacher_handwritten": {
+            "confirmed_by": "local-teacher",
+            "confirmed_at": "2026-11-04T00:00:00Z"
+          }
+        },
+        "partial_choice": {
+          "correct_option_count": 3,
+          "tiers": [
+            {
+              "selected_correct": 1,
+              "points": 2000,
+              "label": "选对 1 个"
+            },
+            {
+              "selected_correct": 2,
+              "points": 4000,
+              "label": "选对 2 个"
+            }
+          ],
+          "wrong_selection_zero": true,
+          "source": "template_data",
+          "source_note": null,
+          "total_milli": 6000
+        }
+      },
+      "subject_hint": "math",
+      "knowledge_tags": [
+        "概率"
+      ]
+    },
+    {
+      "id": "000000000000000000000000ZK",
+      "paper_id": "00000000000000000000000001",
+      "ordinal": 11,
+      "label": "11",
+      "kind": "multiple_choice",
+      "max_score": 6000,
+      "stem": null,
+      "key": {
+        "concrete": {
+          "primary": {
+            "options": [
+              "B",
+              "C"
+            ]
+          },
+          "alternatives": [],
+          "comparators": []
+        }
+      },
+      "rubric": {
+        "id": "000000000000000000000001YV",
+        "version": 1,
+        "items": [
+          {
+            "id": "00000000000000000000000317",
+            "criterion": "全对给满分；按档位部分给分",
+            "points": 6000,
+            "required": true,
+            "depends_on": []
+          }
+        ],
+        "mode": "partial_choice",
+        "total": 6000,
+        "origin": {
+          "teacher_handwritten": {
+            "confirmed_by": "local-teacher",
+            "confirmed_at": "2026-11-04T00:00:00Z"
+          }
+        },
+        "partial_choice": {
+          "correct_option_count": 2,
+          "tiers": [
+            {
+              "selected_correct": 1,
+              "points": 3000,
+              "label": "选对 1 个"
+            }
+          ],
+          "wrong_selection_zero": true,
+          "source": "template_data",
+          "source_note": null,
+          "total_milli": 6000
+        }
+      },
+      "subject_hint": "math",
+      "knowledge_tags": [
+        "统计"
+      ]
+    },
+    {
+      "id": "000000000000000000000000ZM",
+      "paper_id": "00000000000000000000000001",
+      "ordinal": 12,
+      "label": "12",
+      "kind": "fill_in_blank",
+      "max_score": 5000,
+      "stem": null,
+      "key": {
+        "concrete": {
+          "primary": {
+            "number": {
+              "value": "2.5",
+              "unit": null,
+              "tolerance": {
+                "absolute": "0.1",
+                "relative_ppm": null
+              }
+            }
+          },
+          "alternatives": [],
+          "comparators": []
+        }
+      },
+      "rubric": null,
+      "subject_hint": "math",
+      "knowledge_tags": [
+        "函数"
+      ]
+    },
+    {
+      "id": "000000000000000000000000ZN",
+      "paper_id": "00000000000000000000000001",
+      "ordinal": 13,
+      "label": "13",
+      "kind": "fill_in_blank",
+      "max_score": 5000,
+      "stem": null,
+      "key": {
+        "concrete": {
+          "primary": {
+            "number": {
+              "value": "-0.75",
+              "unit": null,
+              "tolerance": null
+            }
+          },
+          "alternatives": [],
+          "comparators": []
+        }
+      },
+      "rubric": null,
+      "subject_hint": "math",
+      "knowledge_tags": [
+        "三角"
+      ]
+    },
+    {
+      "id": "000000000000000000000000ZP",
+      "paper_id": "00000000000000000000000001",
+      "ordinal": 14,
+      "label": "14",
+      "kind": "fill_in_blank",
+      "max_score": 5000,
+      "stem": null,
+      "key": {
+        "concrete": {
+          "primary": {
+            "expression": "x^{2}-1"
+          },
+          "alternatives": [],
+          "comparators": []
+        }
+      },
+      "rubric": null,
+      "subject_hint": "math",
+      "knowledge_tags": [
+        "函数"
+      ]
+    },
+    {
+      "id": "000000000000000000000000ZQ",
+      "paper_id": "00000000000000000000000001",
+      "ordinal": 15,
+      "label": "15",
+      "kind": "fill_in_blank",
+      "max_score": 5000,
+      "stem": null,
+      "key": {
+        "concrete": {
+          "primary": {
+            "text": "正确"
+          },
+          "alternatives": [],
+          "comparators": []
+        }
+      },
+      "rubric": null,
+      "subject_hint": "math",
+      "knowledge_tags": [
+        "逻辑"
+      ]
+    },
+    {
+      "id": "000000000000000000000000ZR",
+      "paper_id": "00000000000000000000000001",
+      "ordinal": 16,
+      "label": "16",
+      "kind": "calculation",
+      "max_score": 13000,
+      "stem": null,
+      "key": {
+        "concrete": {
+          "primary": {
+            "number": {
+              "value": "12",
+              "unit": null,
+              "tolerance": null
+            }
+          },
+          "alternatives": [],
+          "comparators": []
+        }
+      },
+      "rubric": {
+        "id": "000000000000000000000001Z0",
+        "version": 1,
+        "items": [
+          {
+            "id": "0000000000000000000000032S",
+            "criterion": "列出方程并正确代入",
+            "points": 4000,
+            "required": true,
+            "depends_on": []
+          },
+          {
+            "id": "0000000000000000000000032T",
+            "criterion": "完成求解步骤",
+            "points": 5000,
+            "required": true,
+            "depends_on": [
+              "0000000000000000000000032S"
+            ]
+          },
+          {
+            "id": "0000000000000000000000032V",
+            "criterion": "写出最终答案",
+            "points": 4000,
+            "required": true,
+            "depends_on": [
+              "0000000000000000000000032T"
+            ]
+          }
+        ],
+        "mode": "stepwise",
+        "total": 13000,
+        "origin": {
+          "teacher_handwritten": {
+            "confirmed_by": "local-teacher",
+            "confirmed_at": "2026-11-04T00:00:00Z"
+          }
+        },
+        "partial_choice": null
+      },
+      "subject_hint": "math",
+      "knowledge_tags": [
+        "计算"
+      ]
+    },
+    {
+      "id": "000000000000000000000000ZS",
+      "paper_id": "00000000000000000000000001",
+      "ordinal": 17,
+      "label": "17",
+      "kind": "calculation",
+      "max_score": 15000,
+      "stem": null,
+      "key": "rubric_only",
+      "rubric": {
+        "id": "000000000000000000000001Z1",
+        "version": 1,
+        "items": [
+          {
+            "id": "00000000000000000000000333",
+            "criterion": "因式分解正确",
+            "points": 5000,
+            "required": true,
+            "depends_on": []
+          },
+          {
+            "id": "00000000000000000000000334",
+            "criterion": "求出两个零点",
+            "points": 5000,
+            "required": true,
+            "depends_on": [
+              "00000000000000000000000333"
+            ]
+          },
+          {
+            "id": "00000000000000000000000335",
+            "criterion": "写出完整结论",
+            "points": 5000,
+            "required": true,
+            "depends_on": [
+              "00000000000000000000000334"
+            ]
+          }
+        ],
+        "mode": "stepwise",
+        "total": 15000,
+        "origin": {
+          "teacher_handwritten": {
+            "confirmed_by": "local-teacher",
+            "confirmed_at": "2026-11-04T00:00:00Z"
+          }
+        },
+        "partial_choice": null
+      },
+      "subject_hint": "math",
+      "knowledge_tags": [
+        "解答"
+      ]
+    },
+    {
+      "id": "000000000000000000000000ZT",
+      "paper_id": "00000000000000000000000001",
+      "ordinal": 18,
+      "label": "18",
+      "kind": "calculation",
+      "max_score": 17000,
+      "stem": null,
+      "key": {
+        "concrete": {
+          "primary": {
+            "expression": "2x+3"
+          },
+          "alternatives": [],
+          "comparators": []
+        }
+      },
+      "rubric": {
+        "id": "000000000000000000000001Z2",
+        "version": 1,
+        "items": [
+          {
+            "id": "0000000000000000000000033D",
+            "criterion": "合并同类项",
+            "points": 6000,
+            "required": true,
+            "depends_on": []
+          },
+          {
+            "id": "0000000000000000000000033E",
+            "criterion": "化简过程正确",
+            "points": 6000,
+            "required": true,
+            "depends_on": [
+              "0000000000000000000000033D"
+            ]
+          },
+          {
+            "id": "0000000000000000000000033F",
+            "criterion": "写出最终表达式",
+            "points": 5000,
+            "required": true,
+            "depends_on": [
+              "0000000000000000000000033E"
+            ]
+          }
+        ],
+        "mode": "stepwise",
+        "total": 17000,
+        "origin": {
+          "teacher_handwritten": {
+            "confirmed_by": "local-teacher",
+            "confirmed_at": "2026-11-04T00:00:00Z"
+          }
+        },
+        "partial_choice": null
+      },
+      "subject_hint": "math",
+      "knowledge_tags": [
+        "解答"
+      ]
+    },
+    {
+      "id": "000000000000000000000000ZV",
+      "paper_id": "00000000000000000000000001",
+      "ordinal": 19,
+      "label": "19",
+      "kind": "proof",
+      "max_score": 15000,
+      "stem": null,
+      "key": "rubric_only",
+      "rubric": {
+        "id": "000000000000000000000001Z3",
+        "version": 1,
+        "items": [
+          {
+            "id": "0000000000000000000000033Q",
+            "criterion": "写出已知与求证",
+            "points": 6000,
+            "required": true,
+            "depends_on": []
+          },
+          {
+            "id": "0000000000000000000000033R",
+            "criterion": "关键推理步骤",
+            "points": 5000,
+            "required": true,
+            "depends_on": []
+          },
+          {
+            "id": "0000000000000000000000033S",
+            "criterion": "结论与证毕",
+            "points": 4000,
+            "required": true,
+            "depends_on": []
+          }
+        ],
+        "mode": "additive",
+        "total": 15000,
+        "origin": {
+          "teacher_handwritten": {
+            "confirmed_by": "local-teacher",
+            "confirmed_at": "2026-11-04T00:00:00Z"
+          }
+        },
+        "partial_choice": null
+      },
+      "subject_hint": "math",
+      "knowledge_tags": [
+        "证明"
+      ]
+    },
+    {
+      "id": "000000000000000000000000ZW",
+      "paper_id": "00000000000000000000000001",
+      "ordinal": 20,
+      "label": "20",
+      "kind": "short_answer",
+      "max_score": 12000,
+      "stem": null,
+      "key": {
+        "explicitly_omitted": {
+          "note": "略"
+        }
+      },
+      "rubric": null,
+      "subject_hint": "math",
+      "knowledge_tags": [
+        "综合"
+      ]
+    }
+  ],
+  "key_version": 1,
+  "rubric_version": 1,
+  "created_at": "2026-11-04T00:00:00Z"
+}

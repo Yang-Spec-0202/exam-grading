@@ -1,0 +1,8 @@
+{
+  "key": "e96070bc32086a4bb2bae575a1731b5ccb3c82262caf58f3dea6e7fb0d31e207",
+  "model_id": "fixture-judge",
+  "model_version": "1.0",
+  "output_raw": "{\"judgement\":\"partial\",\"score_milli\":9000,\"reason\":\"前两步正确，答案错误\",\"confidence\":0.93,\"matched_alternative\":null,\"calibration_id\":\"cal-fixture-1\",\"satisfied\":[\"0000000000000000000000032S\",\"0000000000000000000000032T\"],\"missing\":[\"0000000000000000000000032V\"]}",
+  "prompt_schema_version": "judge.outcome.v1",
+  "schema_version": 1
+}

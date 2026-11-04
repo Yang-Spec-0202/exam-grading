@@ -1,0 +1,8 @@
+{
+  "key": "7d092da82b27d1671c4beab080f9c4ef845f09870d2aec2a6a544e46596b7fc2",
+  "model_id": "fixture-judge",
+  "model_version": "1.0",
+  "output_raw": "{\"judgement\":\"match\",\"score_milli\":0,\"reason\":\"非法样例\",\"confidence\":0.9}",
+  "prompt_schema_version": "judge.outcome.v1",
+  "schema_version": 1
+}

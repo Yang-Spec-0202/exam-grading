@@ -1,0 +1,23 @@
+[
+  {
+    "id": "000000000000000000000003X1",
+    "classroom_id": "00000000000000000000000002",
+    "student_no": "SO2026-001",
+    "name": "张三",
+    "source": "roster_import"
+  },
+  {
+    "id": "000000000000000000000003X2",
+    "classroom_id": "00000000000000000000000002",
+    "student_no": "SO2026-002",
+    "name": "李四",
+    "source": "roster_import"
+  },
+  {
+    "id": "000000000000000000000003X3",
+    "classroom_id": "00000000000000000000000002",
+    "student_no": "SO2026-003",
+    "name": "王五",
+    "source": "roster_import"
+  }
+]

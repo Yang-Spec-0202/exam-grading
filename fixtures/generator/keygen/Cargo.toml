@@ -1,0 +1,15 @@
+[package]
+name = "fixtures-keygen"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# 独立 workspace（不加入仓库根 workspace）：生成器只在开发机运行，
+# 依赖仓库内 crate 的当前实现，避免把夹具工具混进产品 crate 列表。
+[workspace]
+
+[dependencies]
+eg-domain = { path = "../../../crates/eg-domain" }
+eg-inference = { path = "../../../crates/eg-inference" }
+eg-recognize = { path = "../../../crates/eg-recognize" }
+serde_json = "1.0.154"

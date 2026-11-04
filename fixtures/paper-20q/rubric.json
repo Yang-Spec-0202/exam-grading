@@ -1,0 +1,319 @@
+{
+  "schema_version": 1,
+  "paper_id": "00000000000000000000000001",
+  "rubric_version": 1,
+  "status": "active",
+  "confirmed_by": "local-teacher",
+  "confirmed_at": "2026-11-04T00:00:00Z",
+  "note": "Rubric 领域类型本身无 status/active 字段：生效由 rubric_version + 本文件的确认信封表达（见 fixtures/README.md）。",
+  "questions": [
+    {
+      "question_id": "000000000000000000000000ZH",
+      "ordinal": 9,
+      "kind": "multiple_choice",
+      "max_score_milli": 6000,
+      "rubric": {
+        "id": "000000000000000000000001YS",
+        "version": 1,
+        "items": [
+          {
+            "id": "0000000000000000000000030K",
+            "criterion": "全对给满分；按档位部分给分",
+            "points": 6000,
+            "required": true,
+            "depends_on": []
+          }
+        ],
+        "mode": "partial_choice",
+        "total": 6000,
+        "origin": {
+          "teacher_handwritten": {
+            "confirmed_by": "local-teacher",
+            "confirmed_at": "2026-11-04T00:00:00Z"
+          }
+        },
+        "partial_choice": {
+          "correct_option_count": 2,
+          "tiers": [
+            {
+              "selected_correct": 1,
+              "points": 3000,
+              "label": "选对 1 个"
+            }
+          ],
+          "wrong_selection_zero": true,
+          "source": "template_data",
+          "source_note": null,
+          "total_milli": 6000
+        }
+      }
+    },
+    {
+      "question_id": "000000000000000000000000ZJ",
+      "ordinal": 10,
+      "kind": "multiple_choice",
+      "max_score_milli": 6000,
+      "rubric": {
+        "id": "000000000000000000000001YT",
+        "version": 1,
+        "items": [
+          {
+            "id": "0000000000000000000000030X",
+            "criterion": "全对给满分；按档位部分给分",
+            "points": 6000,
+            "required": true,
+            "depends_on": []
+          }
+        ],
+        "mode": "partial_choice",
+        "total": 6000,
+        "origin": {
+          "teacher_handwritten": {
+            "confirmed_by": "local-teacher",
+            "confirmed_at": "2026-11-04T00:00:00Z"
+          }
+        },
+        "partial_choice": {
+          "correct_option_count": 3,
+          "tiers": [
+            {
+              "selected_correct": 1,
+              "points": 2000,
+              "label": "选对 1 个"
+            },
+            {
+              "selected_correct": 2,
+              "points": 4000,
+              "label": "选对 2 个"
+            }
+          ],
+          "wrong_selection_zero": true,
+          "source": "template_data",
+          "source_note": null,
+          "total_milli": 6000
+        }
+      }
+    },
+    {
+      "question_id": "000000000000000000000000ZK",
+      "ordinal": 11,
+      "kind": "multiple_choice",
+      "max_score_milli": 6000,
+      "rubric": {
+        "id": "000000000000000000000001YV",
+        "version": 1,
+        "items": [
+          {
+            "id": "00000000000000000000000317",
+            "criterion": "全对给满分；按档位部分给分",
+            "points": 6000,
+            "required": true,
+            "depends_on": []
+          }
+        ],
+        "mode": "partial_choice",
+        "total": 6000,
+        "origin": {
+          "teacher_handwritten": {
+            "confirmed_by": "local-teacher",
+            "confirmed_at": "2026-11-04T00:00:00Z"
+          }
+        },
+        "partial_choice": {
+          "correct_option_count": 2,
+          "tiers": [
+            {
+              "selected_correct": 1,
+              "points": 3000,
+              "label": "选对 1 个"
+            }
+          ],
+          "wrong_selection_zero": true,
+          "source": "template_data",
+          "source_note": null,
+          "total_milli": 6000
+        }
+      }
+    },
+    {
+      "question_id": "000000000000000000000000ZR",
+      "ordinal": 16,
+      "kind": "calculation",
+      "max_score_milli": 13000,
+      "rubric": {
+        "id": "000000000000000000000001Z0",
+        "version": 1,
+        "items": [
+          {
+            "id": "0000000000000000000000032S",
+            "criterion": "列出方程并正确代入",
+            "points": 4000,
+            "required": true,
+            "depends_on": []
+          },
+          {
+            "id": "0000000000000000000000032T",
+            "criterion": "完成求解步骤",
+            "points": 5000,
+            "required": true,
+            "depends_on": [
+              "0000000000000000000000032S"
+            ]
+          },
+          {
+            "id": "0000000000000000000000032V",
+            "criterion": "写出最终答案",
+            "points": 4000,
+            "required": true,
+            "depends_on": [
+              "0000000000000000000000032T"
+            ]
+          }
+        ],
+        "mode": "stepwise",
+        "total": 13000,
+        "origin": {
+          "teacher_handwritten": {
+            "confirmed_by": "local-teacher",
+            "confirmed_at": "2026-11-04T00:00:00Z"
+          }
+        },
+        "partial_choice": null
+      }
+    },
+    {
+      "question_id": "000000000000000000000000ZS",
+      "ordinal": 17,
+      "kind": "calculation",
+      "max_score_milli": 15000,
+      "rubric": {
+        "id": "000000000000000000000001Z1",
+        "version": 1,
+        "items": [
+          {
+            "id": "00000000000000000000000333",
+            "criterion": "因式分解正确",
+            "points": 5000,
+            "required": true,
+            "depends_on": []
+          },
+          {
+            "id": "00000000000000000000000334",
+            "criterion": "求出两个零点",
+            "points": 5000,
+            "required": true,
+            "depends_on": [
+              "00000000000000000000000333"
+            ]
+          },
+          {
+            "id": "00000000000000000000000335",
+            "criterion": "写出完整结论",
+            "points": 5000,
+            "required": true,
+            "depends_on": [
+              "00000000000000000000000334"
+            ]
+          }
+        ],
+        "mode": "stepwise",
+        "total": 15000,
+        "origin": {
+          "teacher_handwritten": {
+            "confirmed_by": "local-teacher",
+            "confirmed_at": "2026-11-04T00:00:00Z"
+          }
+        },
+        "partial_choice": null
+      }
+    },
+    {
+      "question_id": "000000000000000000000000ZT",
+      "ordinal": 18,
+      "kind": "calculation",
+      "max_score_milli": 17000,
+      "rubric": {
+        "id": "000000000000000000000001Z2",
+        "version": 1,
+        "items": [
+          {
+            "id": "0000000000000000000000033D",
+            "criterion": "合并同类项",
+            "points": 6000,
+            "required": true,
+            "depends_on": []
+          },
+          {
+            "id": "0000000000000000000000033E",
+            "criterion": "化简过程正确",
+            "points": 6000,
+            "required": true,
+            "depends_on": [
+              "0000000000000000000000033D"
+            ]
+          },
+          {
+            "id": "0000000000000000000000033F",
+            "criterion": "写出最终表达式",
+            "points": 5000,
+            "required": true,
+            "depends_on": [
+              "0000000000000000000000033E"
+            ]
+          }
+        ],
+        "mode": "stepwise",
+        "total": 17000,
+        "origin": {
+          "teacher_handwritten": {
+            "confirmed_by": "local-teacher",
+            "confirmed_at": "2026-11-04T00:00:00Z"
+          }
+        },
+        "partial_choice": null
+      }
+    },
+    {
+      "question_id": "000000000000000000000000ZV",
+      "ordinal": 19,
+      "kind": "proof",
+      "max_score_milli": 15000,
+      "rubric": {
+        "id": "000000000000000000000001Z3",
+        "version": 1,
+        "items": [
+          {
+            "id": "0000000000000000000000033Q",
+            "criterion": "写出已知与求证",
+            "points": 6000,
+            "required": true,
+            "depends_on": []
+          },
+          {
+            "id": "0000000000000000000000033R",
+            "criterion": "关键推理步骤",
+            "points": 5000,
+            "required": true,
+            "depends_on": []
+          },
+          {
+            "id": "0000000000000000000000033S",
+            "criterion": "结论与证毕",
+            "points": 4000,
+            "required": true,
+            "depends_on": []
+          }
+        ],
+        "mode": "additive",
+        "total": 15000,
+        "origin": {
+          "teacher_handwritten": {
+            "confirmed_by": "local-teacher",
+            "confirmed_at": "2026-11-04T00:00:00Z"
+          }
+        },
+        "partial_choice": null
+      }
+    }
+  ]
+}

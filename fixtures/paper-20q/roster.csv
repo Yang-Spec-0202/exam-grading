@@ -1,0 +1,4 @@
+student_no,name,file_stem,expected_identity,note
+SO2026-001,张三,张三,confirmed,规范命名（姓名 + 页码后缀），PNG
+SO2026-002,李四,李四_期中,confirmed,规范命名（姓名_期中 + 页码后缀），JPEG
+SO2026-003,王五,SO2026-003,confirmed,学号命名（学号 + 页码后缀），PNG；另有 EXIF 旋转样例

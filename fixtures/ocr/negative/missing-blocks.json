@@ -1,0 +1,8 @@
+{
+  "key": "09edc3ce50edb3bbff00f9192f971451434cbacfaa4a1b07d711fc802f3236c5",
+  "model_id": "fixture-ocr",
+  "model_version": "1.0",
+  "output_raw": "{\"schema_version\":1}",
+  "prompt_schema_version": "1",
+  "schema_version": 1
+}

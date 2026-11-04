@@ -1,0 +1,8 @@
+{
+  "key": "7e1b237987043badff8e5e30e45e431ee8f0aeed3ac0f72c09a55f8618d3cc66",
+  "model_id": "fixture-ocr",
+  "model_version": "1.0",
+  "output_raw": "{\"schema_version\":1,\"page\":{\"width\":1414,\"height\":2000},\"blocks\":[{\"kind\":\"header_footer\",\"bbox\":[0.0345,0.026,0.2207,0.0068],\"text\":\"姓名：李四　学号：SO2026-002　第 2 页 / 共 2 页\",\"confidence\":0.99},{\"kind\":\"text\",\"bbox\":[0.0345,0.0441,0.1717,0.0099],\"text\":\"二、填空题（第 12-15 题）\",\"latex\":null,\"confidence\":0.97},{\"kind\":\"text\",\"bbox\":[0.0345,0.0646,0.0377,0.0076],\"text\":\"12. 2.5\",\"latex\":null,\"confidence\":0.97},{\"kind\":\"text\",\"bbox\":[0.0345,0.0844,0.0421,0.0073],\"text\":\"13. -0.8\",\"latex\":null,\"confidence\":0.97},{\"kind\":\"formula\",\"bbox\":[0.0345,0.1029,0.0671,0.0099],\"text\":\"14. x^{2}-2\",\"latex\":\"x^{2}-2\",\"confidence\":0.97},{\"kind\":\"text\",\"bbox\":[0.0345,0.122,0.0501,0.0099],\"text\":\"15. 正确\",\"latex\":null,\"confidence\":0.97},{\"kind\":\"text\",\"bbox\":[0.0345,0.1415,0.1717,0.0101],\"text\":\"三、解答题（第 16-20 题）\",\"latex\":null,\"confidence\":0.97},{\"kind\":\"text\",\"bbox\":[0.0345,0.1621,0.0345,0.0076],\"text\":\"16. 10\",\"latex\":null,\"confidence\":0.97},{\"kind\":\"text\",\"bbox\":[0.0345,0.1805,0.1605,0.0104],\"text\":\"17. 由 x^{2}-1 得 x=±1。\",\"latex\":null,\"confidence\":0.55},{\"kind\":\"text\",\"bbox\":[0.0345,0.2015,0.0515,0.0073],\"text\":\"18. 2x+2\",\"latex\":null,\"confidence\":0.97},{\"kind\":\"text\",\"bbox\":[0.0345,0.2195,0.2414,0.0101],\"text\":\"19. 证明：由已知条件可得结论成立。\",\"latex\":null,\"confidence\":0.97},{\"kind\":\"text\",\"bbox\":[0.0345,0.2392,0.0354,0.0099],\"text\":\"20. 略\",\"latex\":null,\"confidence\":0.97}]}",
+  "prompt_schema_version": "1",
+  "schema_version": 1
+}
