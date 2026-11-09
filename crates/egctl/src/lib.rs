@@ -51,6 +51,7 @@ pub mod acceptance;
 pub mod bench;
 pub mod docs_check;
 pub mod doctor;
+pub mod eval;
 pub mod fixture;
 pub mod registry;
 pub mod replay;

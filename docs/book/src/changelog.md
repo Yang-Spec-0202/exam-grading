@@ -2,6 +2,22 @@
 
 > 记录规范与行为的变更（按版本倒序）。文档结构变更也在此登记。
 
+## [0.3.2] - 2026-11-09（S2/S3/S5 合成金标评估器与基线）
+
+### 新增（评估）
+
+- **`egctl eval --gold fixtures/gold [--json] [--out FILE]`**：S2/S3/S5 合成金标评估器（`crates/egctl/src/eval.rs`）。
+  按 `expected.route` 分流：规则路径用 `eg-subject-math` 归一化 + 比较器链（多选部分给分用 `eg-grade::aggregate::partial_choice`），
+  rubric 路径用 `eg-grade::aggregate`（`expected.steps[].matched` 作 judge 逐项输入），manual 只断言路由/状态/原因；
+  输出总体 + 按 kind/perturbation/status 分组指标、失败分类/样本、阈值达成（S2 100%、S3 完全一致 ≥85%/半分内 ≥97%/ECE ≤0.08、S5 ≥98%）。
+  CI 子集 `cargo test -p egctl --test eval_gold`（60 客观 + 30 解答，约 0.04 s）。
+- **实测基线（fixtures/gold v1，2026-11-09）**：540 客观 + 230 解答 = 770 题，耗时约 55 ms。
+  - S2：分数精确一致 100%、归一化 100%、status 100%、auto/review/manual=410/38/92、误给 0=0、多选档位 33/33。
+  - S3：逐评分项 675/675、总分精确 100%、半分内 100%、status 100%、manual 5/5、rubric_only 5/5、校准一致 225/225；ECE=0.0933 为规则推导置信度标签，**不可用于真实校准判定**（如实标注）。
+  - S5：L1 规则命中 770/770=100%、route 标签 100%。
+  - 失败样本 0、失败分类为空；**未发现实现 bug**；未修改 gold/expected 或实现凑数。
+- **文档**：`docs/dev/acceptance.md` S2/S3/S5 改为「已测（合成金标）」，写明命令、样本量、实测数字、阈值与诚实声明。
+
 ## [0.3.1] - 2026-11-05（外部夹具 S1 端到端通过，CP-F ✅）
 
 ### 验收进展

@@ -39,10 +39,10 @@ scripts/acceptance/run.sh --quick --skip-bench
 | 条目 | 当前状态 | 关键依据（详见各条） |
 |---|---|---|
 | S1 全流程 | 已自动化（backend） | `egctl acceptance --fixtures fixtures/paper-20q` 全链路 PASS（287 断言/9 负向/12 步骤，含外部夹具 capture 归组 + OCR/judge 回放 + expected 逐题断言）；UI 键鼠 E2E 仍待办 |
-| S2 客观题确定性 | 待测 | 缺 500 条金标；规则/比较器夹具已有 |
-| S3 解答题准确率 | 待测 | 缺 200 条金标与真实判定模型/校准 |
+| S2 客观题确定性 | 已测（合成金标） | `egctl eval --gold fixtures/gold`：540 客观题，规则分数精确一致 100%、状态一致 100%、误给 0 = 0（2026-11-09） |
+| S3 解答题准确率 | 已测（合成金标） | 230 解答题：逐项一致 100%、总分精确 100%、半分内 100%、status 100%；ECE 0.0933 仅为规则标签、不可判定（真实模型未测） |
 | S4 门禁有效 | 部分已测 | 门禁组合夹具；无真实改分数据 |
-| S5 路由准确率 | 部分已测 | 路由表夹具；缺 300 题标注 |
+| S5 路由准确率 | 已测（合成金标） | 770 题（540+230）：L1 规则命中 100%、route 标签 100%（阈值 ≥98%） |
 | S6 性能 | 部分已测 | 分项实测（capture/OCR/判定/导出/启动）；端到端批次未测 |
 | S7 复核效率 | 阻塞 | 需人工键盘验收（TCC 限制） |
 | S8 可复现 | 部分已测 | 证据链/幂等/导出摘要已测；`egctl replay` 判分回放 TODO |
@@ -109,25 +109,42 @@ scripts/acceptance/run.sh --quick --skip-bench
      mismatch（否则规范 §8 会判冲突）；acceptance 仅在「expected evidence=judge 且该题有 judge
      夹具」时把具体键降级为 rubric-only，不改 expected/夹具文件。
 
-### S2 客观题确定性（500 条标注，规则判定一致率 100%）
+### S2 客观题确定性（540 条合成金标，规则判定一致率 100%）
 
-- **目标**：有具体答案的客观题（单选/多选/判断/填空/纯数值）由确定性规则判分，与教师标注 100% 一致（OCR 高置信子集）。
-- **前置数据（夹具）**：500 条标注样本（题面、答案键、学生答案、教师判定）——**当前未提供**；仅有 subject-math 比较器夹具与 grade 路由夹具。
-- **步骤**：取高置信子集（识别置信度 ≥ `ocr.confidence_floor`）→ 跑 R5/R7 仅规则/规则优先路径 → 与标注逐题比对。
-- **判定**：一致率 = 100%（不一致为 0 条）；比较器「无法判定」必须显式转人工，不得计为一致。
-- **当前状态**：`待测`（缺 500 条标注集；规则与比较器逻辑已有夹具级证据）。
-- **证据位置**：`crates/eg-subject-math/tests/{comparators_fixtures,normalize_fixtures,coverage_paths}.rs`；`eg-grade/tests/{routing_readiness,fixtures_20}.rs`；研究记录 `docs/dev/research/subject-math.md`、`grade.md`。
-- **已知限制**：真实试卷的等价写法/单位/容差分布未知；标注集来源与标注规范待定。
+- **目标**：有具体答案的客观题（单选/多选/判断/填空/纯数值）由确定性规则判分，与标注 100% 一致（OCR 高置信子集）。
+- **前置数据**：仓库级 `fixtures/gold/objective-500.json`（540 条，含具体答案键/题型/扰动/期望；expected 由规范规则独立推导，见 `fixtures/gold/README.md`）；**全部为合成数据，非真实试卷**。
+- **命令**：`egctl eval --gold fixtures/gold --json`（全量 objective 540 + solution 230；CI 子集 `cargo test -p egctl --test eval_gold` = 60 + 30）。
+- **步骤**：按 `expected.route` 分流；rule_only/rule_then_model 用 `eg-subject-math` 归一化 + 比较器链（多选部分给分用 `eg-grade::aggregate::partial_choice`）；与 expected 比对 normalized/judgement/score/status；`手动`只断言路由/状态/原因。
+- **实测（2026-11-09，fixtures/gold v1）**：540 条，**score 精确一致 100%**、normalized 100%、judgement 100%、status 100%、auto/review/manual = 410/38/92（75.9%/7.0%/17.0%）、**误给 0 = 0**、多选部分给分档位 33/33=100%、路由规则命中 100%。失败样本 0。
+- **判定**：规则分数/判定/状态一致率 100%（高置信非 manual 子集）；比较器「无法判定」必须显式转人工，不得计为一致；「不应给 0 却给 0」必须为 0。
+- **当前状态**：`已测（合成金标）`；真实试卷分布、真实 OCR 噪声与教师标注仍未测。
+- **证据位置**：`crates/egctl/src/eval.rs`、`crates/egctl/tests/eval_gold.rs`；金标自检 `python3 scripts/fixtures/verify_gold.py`；规范 `SPEC-grade.md` §4/§5、`SPEC-subject-math.md`。
+- **已知限制**：合成题面/答案与扰动分布；expected 由规则推导（非模型标注），只能证明「实现与规则推导一致」，不能证明教学正确性或真实模型精度。
 
-### S3 解答题准确率（200 条，完全一致 ≥85%、半分内 ≥97%、ECE ≤0.08）
+### S3 解答题准确率（230 条合成金标，完全一致 ≥85%、半分内 ≥97%、ECE ≤0.08）
 
-- **目标**：标准模式下解答题（计算/证明/简答）分数与教师一致，且置信度校准可用。
-- **前置数据（夹具）**：200 条解答题标注（含教师给分）；真实 4B 判定模型与校准记录——**当前未提供**（doctor 显示 3 个本地模型未安装；`live_smoke` 默认 ignored）。
-- **步骤**：固定模型/提示词/判定配置 → 逐题判分 → 统计完全一致率、半分内比例、ECE（置信度分桶）。
-- **判定**：完全一致 ≥85%、半分内 ≥97%、ECE ≤0.08（标准模式；快速模式单独统计）。
-- **当前状态**：`待测`（缺标注集与真实模型；判定逻辑已有夹具级证据）。
-- **证据位置**：`crates/eg-grade/tests/fixtures_20.rs`、`modes_sampling.rs`；`docs/dev/research/models.md` §6.3（判定延迟与样例，非准确率验收）；`egctl bench` 的 `judge_question` 仍未接线（WARN）。
-- **已知限制**：模型精度必须以校准集独立验收集验证；本地 4B 判定模型本轮未复测。
+- **目标**：标准模式下解答题（计算/证明/简答）分步给分与教师一致，且置信度校准可用。
+- **前置数据**：仓库级 `fixtures/gold/solution-200.json`（230 条，含 rubric/学生步骤/合成 judge 元数据/逐项期望；expected 由规范聚合规则推导）；**合成数据，非真实手写/模型输出**。
+- **命令**：`egctl eval --gold fixtures/gold --json`；CI 子集 `cargo test -p egctl --test eval_gold`（30 条）。
+- **步骤**：`expected.steps[].matched` 作为 judge 逐项输入 → `eg-grade::aggregate`（stepwise 依赖固定点/additive/all_or_nothing）→ 对比逐项 effective/score/status；manual（answer_key_omitted）与 rubric_only 只断言分流/状态。
+- **实测（2026-11-09，fixtures/gold v1）**：230 条，**逐评分项一致 675/675=100%**、**总分精确 100%**、**半分内 100%**、status 100%、auto/review/manual = 178/47/5、manual 分流 5/5=100%、rubric_only 聚合 5/5=100%、校准 id 一致 225/225、误给 0 = 0。
+  **ECE = 0.0933**：以 gold 的「规则推导置信度标签」分桶计算（阈值 0.08），**不是模型实测置信度**，按 gold README §0 不具校准判定意义 → 标记「未达成/不可判定」，真实 ECE 需真实 4B 模型输出（仍待测）。
+- **判定**：完全一致 ≥85%（实测 100%）、半分内 ≥97%（实测 100%）；ECE ≤0.08 **未验证**（合成标签不可判定）。
+- **当前状态**：`已测（合成金标）`；真实 4B 判定模型/校准集未参与（doctor 显示本地模型未安装），真实手写解答未测。
+- **证据位置**：`crates/egctl/src/eval.rs`、`crates/egctl/tests/eval_gold.rs`；`fixtures/gold/README.md` §2.2/§4；`docs/dev/research/grade.md`。
+- **已知限制**：judge 逐项输入是 gold 的合成 `matched`，不是真实模型判定；半分内按「满分/2」口径计算；ECE 不可判定（见上）。
+
+### S5 路由准确率（770 题合成金标，L1 ≥98%）
+
+- **目标**：L1 有序路由表对「该题怎么判」的判定与标注一致。
+- **前置数据**：`fixtures/gold` 全量 770 题（540 客观 + 230 解答，含 manual/R0–R11 覆盖与 kind/扰动分布）。
+- **命令**：`egctl eval --gold fixtures/gold --json`；CI 子集同 `eval_gold`。
+- **步骤**：纯函数 `eg_grade::route` 逐题执行（不调用模型）→ 对比 `expected.rule_trace`（R0–R11）与 `expected.route` 标签。
+- **实测（2026-11-09）**：770/770 规则命中 **100%**、route 标签 100%（阈值 ≥98%）；R9 分类澄清在 gold 中未触发模型（无未知题型样本）。
+- **判定**：规则命中 ≥98%；R9 分类置信度 <0.9 必须转人工（本数据集未覆盖 R9 触发样本）。
+- **当前状态**：`已测（合成金标）`；真实题型分布与「答案键与题型冲突」样本仍未测。
+- **证据位置**：`crates/egctl/src/eval.rs`、`crates/egctl/tests/eval_gold.rs`；`eg-grade/src/route.rs`；`fixtures/gold/README.md` §4。
+- **已知限制**：gold 的 expected 由规范 L1 表推导，等于用同规范验证实现；不能替代人工标注的独立路由准确率；R9 未覆盖。
 
 ### S4 门禁有效（自动出分后被教师改分 ≤5%，按题，标准模式）
 

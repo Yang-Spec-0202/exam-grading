@@ -17,7 +17,7 @@
     reason = "CLI 入口需要向标准输出报告结果；子命令统一返回 Result<u8, String> 便于分发"
 )]
 
-use egctl::{bench, docs_check, doctor, replay, service, util};
+use egctl::{bench, docs_check, doctor, eval, replay, service, util};
 use std::path::PathBuf;
 use std::process::ExitCode;
 
@@ -45,6 +45,8 @@ enum Command {
     DiagnosticsExport,
     /// S1 端到端自动化验收。
     Acceptance,
+    /// S2/S3/S5 合成金标评估。
+    Eval,
 }
 
 /// 解析后的参数。
@@ -56,6 +58,9 @@ struct Args {
     fixture: Option<PathBuf>,
     out: Option<PathBuf>,
     log_limit: usize,
+    gold: Option<PathBuf>,
+    limit_objective: Option<usize>,
+    limit_solution: Option<usize>,
     command: Command,
 }
 
@@ -91,6 +96,7 @@ fn run() -> Result<u8, String> {
         Command::Restore(dir) => run_restore(&args, dir),
         Command::DiagnosticsExport => run_diagnostics(&args),
         Command::Acceptance => run_acceptance(&args),
+        Command::Eval => run_eval(&args),
     }
 }
 
@@ -317,6 +323,35 @@ fn run_diagnostics(args: &Args) -> Result<u8, String> {
     Ok(0)
 }
 
+fn run_eval(args: &Args) -> Result<u8, String> {
+    let gold = args
+        .gold
+        .clone()
+        .unwrap_or_else(|| PathBuf::from("fixtures/gold"));
+    let options = eval::Options {
+        gold,
+        max_objective: args.limit_objective,
+        max_solution: args.limit_solution,
+    };
+    let report = eval::run(&options)?;
+    if args.json {
+        let value = report.to_json();
+        let text = serde_json::to_string_pretty(&value).unwrap_or_default();
+        if let Some(out) = &args.out {
+            std::fs::write(out, &text)
+                .map_err(|error| format!("写 {} 失败：{error}", out.display()))?;
+        }
+        println!("{text}");
+    } else {
+        println!("{}", report.render_human());
+    }
+    Ok(0)
+}
+
+#[allow(
+    clippy::too_many_lines,
+    reason = "CLI 参数解析集中列出全部子命令/选项，便于对照帮助文本"
+)]
 fn parse_args() -> Result<Args, String> {
     let mut data_dir = None;
     let mut json = false;
@@ -325,6 +360,9 @@ fn parse_args() -> Result<Args, String> {
     let mut fixture = None;
     let mut out = None;
     let mut log_limit = 2000usize;
+    let mut gold = None;
+    let mut limit_objective = None;
+    let mut limit_solution = None;
     let mut tokens: Vec<String> = Vec::new();
 
     let mut args = std::env::args().skip(1);
@@ -357,6 +395,32 @@ fn parse_args() -> Result<Args, String> {
                 max_sha_mib = value
                     .parse()
                     .map_err(|_| format!("--max-sha-mib 非法：{value}"))?;
+            }
+            "--gold" => {
+                gold = Some(PathBuf::from(
+                    args.next()
+                        .ok_or_else(|| "--gold 需要一个目录参数".to_owned())?,
+                ));
+            }
+            "--limit-objective" => {
+                let value = args
+                    .next()
+                    .ok_or_else(|| "--limit-objective 需要一个整数".to_owned())?;
+                limit_objective = Some(
+                    value
+                        .parse()
+                        .map_err(|_| format!("--limit-objective 非法：{value}"))?,
+                );
+            }
+            "--limit-solution" => {
+                let value = args
+                    .next()
+                    .ok_or_else(|| "--limit-solution 需要一个整数".to_owned())?;
+                limit_solution = Some(
+                    value
+                        .parse()
+                        .map_err(|_| format!("--limit-solution 非法：{value}"))?,
+                );
             }
             "--log-limit" => {
                 let value = args
@@ -391,6 +455,7 @@ fn parse_args() -> Result<Args, String> {
         [one] if one == "backup" => Command::Backup,
         [one] if one == "version" => Command::Version,
         [one] if one == "acceptance" => Command::Acceptance,
+        [one] if one == "eval" => Command::Eval,
         [first, second] if first == "docs" && second == "check" => Command::DocsCheck,
         [first, second] if first == "diagnostics" && second == "export" => {
             Command::DiagnosticsExport
@@ -411,6 +476,9 @@ fn parse_args() -> Result<Args, String> {
         fixture,
         out,
         log_limit,
+        gold,
+        limit_objective,
+        limit_solution,
         command,
     })
 }
@@ -430,6 +498,7 @@ fn print_help() {
            restore <备份目录>     从备份恢复数据库（需桌面端退出）\n\
            diagnostics export     导出诊断包（需桌面端退出）\n\
            acceptance             S1 端到端自动化验收（fixtures→导入→识别→对齐→判分→复核→导出）\n\
+           eval                   S2/S3/S5 合成金标评估（默认 --gold fixtures/gold；--json/--out）\n\
            version / --version    版本\n\
          \n\
          全局选项：\n\
@@ -440,6 +509,9 @@ fn print_help() {
            --fixtures <目录>      replay/acceptance 夹具目录（acceptance 默认 fixtures/paper-20q）\n\
            --out <目录>           replay 保留导出 / diagnostics 输出目录\n\
            --log-limit <条数>     diagnostics 日志条数上限（默认 2000）\n\
+           --gold <目录>          eval 金标目录（默认 fixtures/gold）\n\
+           --limit-objective <N>  eval 仅取前 N 条客观题\n\
+           --limit-solution <N>   eval 仅取前 N 条解答题\n\
          \n\
          退出码：0 = OK，2 = WARN（有降级/未就绪项），1 = ERROR",
         env!("CARGO_PKG_VERSION")
