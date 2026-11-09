@@ -40,7 +40,7 @@ scripts/acceptance/run.sh --quick --skip-bench
 |---|---|---|
 | S1 全流程 | 已自动化（backend） | `egctl acceptance --fixtures fixtures/paper-20q` 全链路 PASS（287 断言/9 负向/12 步骤，含外部夹具 capture 归组 + OCR/judge 回放 + expected 逐题断言）；UI 键鼠 E2E 仍待办 |
 | S2 客观题确定性 | 已测（合成金标） | `egctl eval --gold fixtures/gold`：540 客观题，规则分数精确一致 100%、状态一致 100%、误给 0 = 0（2026-11-09） |
-| S3 解答题准确率 | 已测（合成金标） | 230 解答题：逐项一致 100%、总分精确 100%、半分内 100%、status 100%；ECE 0.0933 仅为规则标签、不可判定（真实模型未测） |
+| S3 解答题准确率 | 已测（合成金标 + 真实 4B 采样） | fixture/规则基线：逐项 100%、总分 100%、半分内 100%（ECE 0.0933 仅规则标签）；真实 qwen3.5-4b Q4 采样 60 条：逐项 77.2%、总分精确 56.7%、半分内 83.3%、真实 ECE 0.1778、status 20%（无 calibration_id） |
 | S4 门禁有效 | 部分已测 | 门禁组合夹具；无真实改分数据 |
 | S5 路由准确率 | 已测（合成金标） | 770 题（540+230）：L1 规则命中 100%、route 标签 100%（阈值 ≥98%） |
 | S6 性能 | 部分已测 | 分项实测（capture/OCR/判定/导出/启动）；端到端批次未测 |
@@ -124,27 +124,24 @@ scripts/acceptance/run.sh --quick --skip-bench
 ### S3 解答题准确率（230 条合成金标，完全一致 ≥85%、半分内 ≥97%、ECE ≤0.08）
 
 - **目标**：标准模式下解答题（计算/证明/简答）分步给分与教师一致，且置信度校准可用。
-- **前置数据**：仓库级 `fixtures/gold/solution-200.json`（230 条，含 rubric/学生步骤/合成 judge 元数据/逐项期望；expected 由规范聚合规则推导）；**合成数据，非真实手写/模型输出**。
-- **命令**：`egctl eval --gold fixtures/gold --json`；CI 子集 `cargo test -p egctl --test eval_gold`（30 条）。
-- **步骤**：`expected.steps[].matched` 作为 judge 逐项输入 → `eg-grade::aggregate`（stepwise 依赖固定点/additive/all_or_nothing）→ 对比逐项 effective/score/status；manual（answer_key_omitted）与 rubric_only 只断言分流/状态。
-- **实测（2026-11-09，fixtures/gold v1）**：230 条，**逐评分项一致 675/675=100%**、**总分精确 100%**、**半分内 100%**、status 100%、auto/review/manual = 178/47/5、manual 分流 5/5=100%、rubric_only 聚合 5/5=100%、校准 id 一致 225/225、误给 0 = 0。
-  **ECE = 0.0933**：以 gold 的「规则推导置信度标签」分桶计算（阈值 0.08），**不是模型实测置信度**，按 gold README §0 不具校准判定意义 → 标记「未达成/不可判定」，真实 ECE 需真实 4B 模型输出（仍待测）。
-- **判定**：完全一致 ≥85%（实测 100%）、半分内 ≥97%（实测 100%）；ECE ≤0.08 **未验证**（合成标签不可判定）。
-- **当前状态**：`已测（合成金标）`；真实 4B 判定模型/校准集未参与（doctor 显示本地模型未安装），真实手写解答未测。
-- **证据位置**：`crates/egctl/src/eval.rs`、`crates/egctl/tests/eval_gold.rs`；`fixtures/gold/README.md` §2.2/§4；`docs/dev/research/grade.md`。
-- **已知限制**：judge 逐项输入是 gold 的合成 `matched`，不是真实模型判定；半分内按「满分/2」口径计算；ECE 不可判定（见上）。
+- **口径**：fixture/规则基线 = 用 gold 的合成 `expected.steps[].matched` 作 judge 输入（测实现聚合）；真实模型 = 本地 4B judge 逐评分项请求，模型 confidence 重算 ECE。**两者不可混用**。
 
-### S5 路由准确率（770 题合成金标，L1 ≥98%）
+| 分支 | 命令/样本 | 逐项一致 | 总分精确 | 半分内 | status 一致 | ECE |
+|---|---|---|---|---|---|---|
+| fixture/规则基线（2026-11-09） | `egctl eval --gold fixtures/gold`；230 条 / 675 评分项 | 675/675=**100%** | **100%** | **100%** | **100%** | 0.0933（规则标签，不可判定） |
+| 真实 4B（2026-11-10） | `egctl eval --gold fixtures/gold --real-judge --judge-endpoint http://127.0.0.1:8082/v1 --model qwen3.5-4b-instruct --sample 60 --concurrency 3 --json --out target/acceptance/eval-real-judge-sample60-20261109.json`；60/225 条（抽样，跳过 manual 5）/180 次评分项请求 | 139/180=**77.2%**（Wilson 95% CI 70.6–82.7%） | **56.7%**（34/60） | **83.3%**（50/60） | **20%**（12/60；模型无 calibration_id，门禁全 review） | **0.1778**（n=180；fixture 基线 0.0933） |
 
-- **目标**：L1 有序路由表对「该题怎么判」的判定与标注一致。
-- **前置数据**：`fixtures/gold` 全量 770 题（540 客观 + 230 解答，含 manual/R0–R11 覆盖与 kind/扰动分布）。
-- **命令**：`egctl eval --gold fixtures/gold --json`；CI 子集同 `eval_gold`。
-- **步骤**：纯函数 `eg_grade::route` 逐题执行（不调用模型）→ 对比 `expected.rule_trace`（R0–R11）与 `expected.route` 标签。
-- **实测（2026-11-09）**：770/770 规则命中 **100%**、route 标签 100%（阈值 ≥98%）；R9 分类澄清在 gold 中未触发模型（无未知题型样本）。
-- **判定**：规则命中 ≥98%；R9 分类置信度 <0.9 必须转人工（本数据集未覆盖 R9 触发样本）。
-- **当前状态**：`已测（合成金标）`；真实题型分布与「答案键与题型冲突」样本仍未测。
-- **证据位置**：`crates/egctl/src/eval.rs`、`crates/egctl/tests/eval_gold.rs`；`eg-grade/src/route.rs`；`fixtures/gold/README.md` §4。
-- **已知限制**：gold 的 expected 由规范 L1 表推导，等于用同规范验证实现；不能替代人工标注的独立路由准确率；R9 未覆盖。
+- **真实模型附加结果（sample=60，seed=20261109，按 perturbation×expected.status 分层）**：
+  - 服务：llama.cpp build `b11960-8642541b2`，qwen3.5-4b-instruct Q4_K_M，4 slots，temperature=0、max_tokens=256、stream=false、json_object、timeout=20s；thinking 关。
+  - 失败/超时：**0**（180 次调用全部通过 `JudgeOutput::validate`）；无失败分类样本。
+  - 混淆矩阵（expected↓/actual→）：expected match → match 24 / mismatch 5 / partial 6；expected mismatch → mismatch 2；expected partial → mismatch 14 / partial 9。无 expected mismatch 被模型判 match（未出现「错答给满分」），但大量 expected partial 被判 mismatch（漏给分）。
+  - 延迟：mean **7211 ms**、P50 **7276 ms**、P95 **9103 ms**（**concurrency=3**，含排队；串行 smoke 约 2.5–2.6 s/评分项，首次 prefill 约 23 s；prompt cache 会掩盖真实成本）。
+  - token：prompt 57,777（mean 963/次）、completion 8,612（mean 143.5/次）、total 66,389。
+  - 全量命令：把 `--sample 60` 改 `--sample 0`（225 条 / ~675 次请求；单实例串行约 40–60 min，建议 2–3 并发并按本表口径标注并发）。
+- **判定**：fixture 基线完全一致 100%（达标 ≥85%、半分内 100% 达标 ≥97%）；真实 4B 本次 **未达** S3 目标（总分精确 56.7% <85%，半分内 83.3% <97%，真实 ECE 0.1778 >0.08）。**如实记录，不调参、不改 gold/实现凑数**；status 20% 主要由「模型无 calibration_id → 门禁全部 needs_review」导致，非准确率指标本身。
+- **当前状态**：`已测（合成金标）` + `真实 4B 采样已测（未达标）`；真实手写解答/真实教师标注仍缺。
+- **证据位置**：`crates/egctl/src/eval.rs`（fixture 基线）、`crates/egctl/src/eval_real.rs`（真实 judge）、`crates/egctl/tests/eval_gold.rs`、`crates/egctl/tests/eval_real_judge.rs`（`#[ignore]`）；结果 JSON `target/acceptance/eval-real-judge-sample60-20261109.json`；`fixtures/gold/README.md` §0/§2.2；`docs/dev/research/models.md` §11.5。
+- **已知限制**：gold 是合成规则标签（非真实教师标注）；真实模型仅 60 条抽样（`expected.steps[].matched` 不是模型标注）；无校准集/calibration_id，ECE 仅按模型自报 confidence 分桶（180 项，分桶不足标记 0）；延迟含并发排队与 prompt cache；不覆盖 OCR 链路/手写。
 
 ### S4 门禁有效（自动出分后被教师改分 ≤5%，按题，标准模式）
 
@@ -273,7 +270,7 @@ scripts/acceptance/run.sh --quick --skip-bench
 | L4 | Keychain 授权框 | 未验证 | 需真实桌面点「允许」；`cp_b_keychain` 默认 ignored | `EXAM_GRADING_KEYCHAIN_SMOKE=1` 人工冒烟并记录 |
 | L5 | HEIC / DOCX | 已确认不支持（v1 限制） | capture v1 显式拒绝（`heic_unsupported`/`unsupported_format`） | 若启用需新增依赖并审批（`SPEC-capture.md` v0.2.4） |
 | L6 | 真实模型权重 | 未就绪 | doctor：4/7 本地模型已安装、3 个未安装（约 6.3 GiB 已安装）；`live_smoke` ignored | `scripts/model/pull.sh` 下发后跑 `cargo test -p eg-inference --test live_smoke -- --ignored` |
-| L7 | 真实判分模型精度/校准 | 未验证 | 4B 判定未复测；无校准集 | 独立校准/验收集 + `grade` 校准链路 |
+| L7 | 真实判分模型精度/校准 | 部分已测（60 条采样，未达标） | 4B 判定已复测（§3-S3：逐项 77.2%/总分精确 56.7%/半分内 83.3%/ECE 0.1778）；仍无校准集与真实教师标注 | 独立校准/验收集（脱敏真实卷 + 教师标注）+ `grade` 校准链路 |
 | L8 | UI 键鼠 / HiDPI / 深色模式 | 未验证 | 需桌面人工；app 研究记录 §8.2 已列「未做」 | 手工验收清单 + 截图/录屏证据 |
 | L9 | 仓库级 `fixtures/` 与 `docs/dev/performance.md` | 缺失 | `SPEC.md` §6 期望 `fixtures/`；T39 要求性能基线文档 | 补目录与性能文档（M10 任务） |
 | L10 | 端到端断网抓包 / 判分中断恢复 / 40×2 页性能 | 未验证 | 依赖 S1 与真实模型 | S1 可跑后按 §3 步骤执行并记录 |

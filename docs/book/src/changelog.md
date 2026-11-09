@@ -2,6 +2,28 @@
 
 > 记录规范与行为的变更（按版本倒序）。文档结构变更也在此登记。
 
+## [0.3.3] - 2026-11-10（真实 4B judge S3 复测：`egctl eval --real-judge`）
+
+### 新增（评估）
+
+- **`egctl eval --real-judge --judge-endpoint <URL> --model <name> [--sample N] [--concurrency N]`**：
+  `crates/egctl/src/eval_real.rs` 逐评分项请求本地 OpenAI-compatible judge（`temperature=0`、`max_tokens=256`、
+  `stream=false`、`response_format=json_object`、timeout 20s；输出必须过 `JudgeOutput::validate`），
+  模型 `match` 视为评分项满足 → `eg-grade::aggregate` → 与 `fixtures/gold` 对比；输出逐项/总分/status/
+  混淆矩阵/真实 ECE（模型 confidence 分桶）/延迟 P50/P95/token/失败分类，按 perturbation×status 固定 seed 分层抽样。
+- **实测（2026-11-10，qwen3.5-4b-instruct Q4_K_M，llama.cpp build b11960-8642541b2，4 slots）**：
+  `--sample 60 --concurrency 3`：60/225 条（跳过 manual 5），180 次评分项请求，**0 失败/超时**；
+  逐项一致 139/180=**77.2%**（Wilson 95% CI 70.6–82.7%）、总分精确 **56.7%**、半分内 **83.3%**、
+  status **20%**（模型无 calibration_id，门禁全 review）、真实 **ECE 0.1778**（n=180；fixture 基线 0.0933）；
+  延迟 mean/P50/P95 = **7211/7276/9103 ms**（并发 3，含排队）、token prompt 57,777 / completion 8,612 / total 66,389；
+  混淆矩阵：expected match→match24/mismatch5/partial6，expected mismatch→mismatch2，expected partial→mismatch14/partial9。
+  结论：**真实 4B 未达 S3 目标**（低于 fixture/规则基线 100%），如实报告，不调参/不改 gold；
+  结果 JSON：`target/acceptance/eval-real-judge-sample60-20261109.json`。
+- **CI**：真实模型测试 `crates/egctl/tests/eval_real_judge.rs` 标 `#[ignore]`，普通 `cargo test -p egctl` 不依赖服务；
+  fixture 版本全绿。
+- **文档**：`docs/dev/acceptance.md` S3 拆「fixture/规则基线 100%」与「真实 4B 采样（未达标）」两行，
+  写命令、样本量、指标、混淆矩阵、延迟/token、限制与证据路径。
+
 ## [0.3.2] - 2026-11-09（S2/S3/S5 合成金标评估器与基线）
 
 ### 新增（评估）

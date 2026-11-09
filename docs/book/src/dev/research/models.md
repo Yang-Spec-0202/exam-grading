@@ -1,7 +1,7 @@
 # 研究记录：本地推理模型（OCR + 判定）获取、校验与 serving
 
 > 模块与范围：`inference`（模型注册表/本地 sidecar）· 任务 T19 前置（M0 并行）
-> 记录日期：2026-11-02（Asia/Shanghai）· 实测机器：Apple M4 / 16 GB / macOS 27.0.1
+> 记录日期：2026-11-02（Asia/Shanghai）· 更新：2026-11-09 追加 §11「评估用 serving 就绪」· 实测机器：Apple M4 / 16 GB / macOS 27.0.1
 > 关联：`SPEC-inference.md` §2（角色/注册表/许可门禁）§4（sidecar 生命周期）、`CONFIG.md` §4/§5/§9.5/§10、`AGENTS.md`
 > 交付物：`scripts/model/{pull,verify,serve,health}.sh` + `registry.tsv` + `profiles.tsv` + `defaults.conf`、`config/cloud.deepseek.toml`
 
@@ -312,3 +312,90 @@ curl -s http://127.0.0.1:8081/v1/chat/completions -H 'Content-Type: application/
 3. `ocr.segment_recognition` 一旦启用（表/公式元素级调用），单页会变成多次推理，§6.2 的 7.2 s 不再是页级预算，需重测。
 4. 判定置信度是否需要温度/校准表（`SPEC-inference.md` §10-Q7）：本机 temp 0 下三次同题输出完全一致，说明确定性够，但校准另算。
 5. 若换 MLX/vLLM（§10-Q5），`profiles.tsv` 需要增加「实现类型」字段，`serve.sh` 相应分支。
+
+
+---
+
+## 11. 评估用 serving 就绪（2026-11-09，S3 真实 ECE 前置）
+
+> 目的：给 `domain-core` 的 S3 真实 ECE 复测提供**常驻**的本地判定/识别服务。
+> 环境不变：Apple M4 / 16 GB / macOS 27.0.1 / llama.cpp 0.8.0（build 11960，commit `8642541b2`）。
+> 本节是**运行手册**（怎么起、怎么验、怎么停、有什么限制），不重复 §6 的模型效果评估。
+
+### 11.1 当前常驻实例（2026-11-09 23:45/23:49 起，未停止）
+
+| 角色 | 注册表 id / 权重 | 端口 | PID | 日志 | 启动耗时 | RSS |
+|---|---|---|---|---|---|---|
+| judge | `qwen3.5-4b-instruct`（Q4_K_M，2.73 GB 单文件） | `127.0.0.1:8082` | 80657 | `<数据目录>/logs/model/llama-qwen3.5-4b-instruct.log` | 3 s（页缓存温） | 3.17 GB |
+| ocr | `paddleocr-vl-1.6`（BF16，双文件） | `127.0.0.1:8081` | 81377 | `<数据目录>/logs/model/llama-paddleocr-vl-1.6.log` | 2 s | 2.02 GB |
+
+- 数据目录：`~/Library/Application Support/exam-grading`；pid 文件 `run/llama-qwen3.5-4b-instruct.pid`、`run/llama-paddleocr-vl-1.6.pid`。
+- 两进程 `PPID=1`（`serve.sh` 用 `nohup` 脱离终端）：会话结束不退出，机器重启后需重新 `start`。
+- 健康：`/health` → `{"status":"ok"}`；`/v1/models` judge 返回 `qwen3.5-4b-instruct`（`n_ctx=8192`、`ftype=Q4_K - Medium`、`n_params=4.21B`），OCR 返回 `paddleocr-vl-1.6`（`metadata.ftype=BF16`、`input_modalities` 含 `image`）。
+- 合计常驻内存 ≈ **5.2 GB**（3.17 + 2.02）；`memory_pressure` 显示 system-wide free 26%，未触发 swap 压力。
+
+### 11.2 启动 / 停止 / 状态
+
+```bash
+# 启动（端口/ctx/temp/ngl 来自 scripts/model/profiles.tsv；只绑 127.0.0.1）
+./scripts/model/serve.sh start judge     # → 127.0.0.1:8082, ctx 8192, temp 0.0, -ngl 99
+./scripts/model/serve.sh start ocr       # → 127.0.0.1:8081
+
+# 健康与状态
+./scripts/model/serve.sh status
+./scripts/model/health.sh
+
+# 停止
+./scripts/model/serve.sh stop judge      # 或 stop ocr / stop all
+
+# 等价裸命令（judge：serve.sh 实际执行的 argv）
+llama-server -m "<数据目录>/models/qwen3.5-4b-instruct/model.gguf" \
+  --host 127.0.0.1 --port 8082 -c 8192 --temp 0.0 -ngl 99 \
+  -a qwen3.5-4b-instruct --no-webui \
+  --chat-template-kwargs '{"enable_thinking":false}'
+```
+
+参数语义（与 `profiles.tsv` 一致）：
+
+- `--host 127.0.0.1`：**只回环**，禁止 LAN 暴露；`--no-webui`：关闭内置 UI。
+- `-c 8192`：单题判定 prompt ~520 token + 输出 ≤256 足够；OCR 单页 prompt ~1273 token。超长输入会被截断（`finish_reason=length`），客户端必须判失败。
+- `--temp 0.0`：可复现；同题三次输出逐字节一致（§10-4）。
+- `-ngl 99`：Metal 全量卸载（`llama-server --list-devices`：`MTL0 Apple M4`）。
+- `--chat-template-kwargs '{"enable_thinking":false}'`：关闭 Qwen3.5 thinking（否则 content 为空/只有 think 块）。**build 11960 已提示弃用**：「Setting 'enable_thinking' via --chat-template-kwargs is deprecated. Use --reasoning on / --reasoning off instead.」当前仍生效（响应 `message` 只有 `role/content`，无 `reasoning_content`）；**升级 llama.cpp 前需把 profiles.tsv 的 extra_args 改为 `--reasoning off`**。
+- 启动等待：`serve.sh` 默认 `STARTUP_TIMEOUT_S=90`；实测温页缓存 judge 3 s / OCR 2 s（冷页缓存/首次含图访问见 §6：OCR 首请求 7.18 s）。
+
+### 11.3 真实请求冒烟（2026-11-09 实测）
+
+**judge**（system=`fixtures/judge/prompt.txt`，user=`fixtures/judge/inputs/so2026-001-q17.json`，`response_format={"type":"json_object"}`，`max_tokens=256`，`temperature=0`）：
+
+- 3 次请求均 HTTP 200；耗时 **7.13 s / 4.92 s / 4.91 s**。第 1 次：prompt 520 token prefill 2.25 s（230 tok/s）+ 生成 140 token 4.85 s（28.7 tok/s）；第 2/3 次提示词缓存命中 516 token，仅 ~4.9 s。
+- 输出：`{"judgement":"match","score_milli":15000,"reason":"…","confidence":0.98,"calibration_id":null,"satisfied":[],"missing":[]}`；用仓库内**真实** `eg_inference::JudgeOutput::validate(…, MilliScore::from_milli(15000))` 校验通过（judgement=Match、score=15000、confidence=0.98）。
+- usage：prompt 520 / completion 140 / total 660（`prompt_tokens_details.cached_tokens=516`）。
+
+**OCR**（`fixtures/ocr/inputs/张三_p1.png`，1414×2000、34,620 B → base64；提示词 `OCR:`；`max_tokens=2048`）：
+
+- HTTP 200；耗时 **5.82 s（冷）/ 0.71 s（第 2 次，提示词缓存命中）**。
+- 输出 101 字符，与图片印刷内容一致：`姓名：张三 学号：SO2026-001 第1页/共2页 / 一、选择题（第1-11题）/ 1. A … 11. A`。
+- usage：prompt 1273 / completion 83（prefill 5.11 s = 249 tok/s；生成 0.66 s = 124 tok/s）。
+
+结论：两端点可用；**首请求 prefill 是主要延迟**（judge 2.25 s / OCR 5.11 s），重复请求因 prompt cache 快 1.5–8×。S3 以单题判分为主，judge 4.9–7.1 s/题（`CONFIG.md` `grade.judge_timeout_s=20`，余量充足）。
+
+### 11.4 限制（评估时必须知道）
+
+1. **单实例 / 端口独占**：每个模型一个进程一个固定端口；端口被占用时 `serve.sh start` 直接报错退出，不会挤掉旧进程。
+2. **无鉴权、无 TLS**：`server_setup` 明确 WARN「no API key is set and CORS allows all origins」；只允许 `127.0.0.1`，禁止 `HOST=0.0.0.0` 或端口转发。
+3. **默认 4 slots**（`/props.total_slots=4`、`kv_unified=true`）：可并发但**未压测**（16 GB 下并发会抢内存/降速）；S3 串行评估无影响。
+4. **prompt cache 掩盖真实成本**：重复同题命中缓存（judge 516/520、OCR 1272/1273 token），延迟显著偏低；测吞吐/成本必须换输入或重启服务。
+5. **上下文 8192**：超长页/rubric 会被截断，客户端不得把截断结果当完整输出（`inference` 已按失败处理）。
+6. **thinking 参数将弃用**：见 §11.2；升级 llama.cpp 前先改 `profiles.tsv`。
+7. **权重不入库**：权重在数据目录（`pull.sh` 下发；仓库 `.gitignore` 已排除），换机需重新下载 + `verify.sh`。
+8. **Q4 精度**：judge 为 Q4_K_M；ECE 结论只对应此量化，换 BF16/其它量化必须重测。
+9. **进程边界**：`serve.sh stop` 按 pid 文件停；机器重启/手动 kill 后需重新 `start`；无响应时先 `serve.sh status` 再 `serve.sh restart judge`。
+
+### 11.5 给 S3 真实 ECE 的调用约定
+
+- judge base URL：`http://127.0.0.1:8082/v1`；model 字段填 `qwen3.5-4b-instruct`（llama-server 不校验 model 名，填注册表 id 便于日志对齐）。
+- 请求：`POST /v1/chat/completions`，`stream=false`，`temperature=0`，`max_tokens=256`（判定 JSON 实测 140 token），`response_format={"type":"json_object"}`（JSON grammar 约束）。
+- 客户端超时：判定 ≥20 s（`grade.judge_timeout_s`）；不要用 curl 默认无限超时。
+- 输出校验：必须过 `JudgeOutput::validate`；截断/非 JSON 一律判失败，不猜。
+- OCR（如需要）：`http://127.0.0.1:8081/v1`，多模态 content（`image_url` base64 + `text:"OCR:"`），单页超时 ≥60 s（`ocr.page_timeout_s`），首请求约 6 s。
