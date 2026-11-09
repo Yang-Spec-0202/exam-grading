@@ -369,7 +369,7 @@ EXAM_GRADING_DATA_DIR=<data-dir>/eg-app-s1 ./target/release/eg-app --smoke
 | 重判任务化（真实任务队列） | 新增 `PlatformRegradeEngine` 替换 `UnavailableRegrade`：修文本重判/整卷重跑都落 **platform `SubmissionGrade` 任务**（payload 含 grade/submission/question/scope/mode/corrected/idempotency_key；`with_scope("regrade:<submission>")` + 输入哈希幂等）；ReviewService 返回 `RegradeScheduled` 并审计；**原判分记录不改**（失败/未执行时保留原判） | 冒烟：`regrade_text` 与「抽检不通过→整卷重跑」各登记 1 条任务（任务队列 2→4），重判断言 2/2；抽检记录为 Fast+sampled+AutoAccepted 夹具修订 |
 | 复核命令/导出/图像（沿用） | platform 队列/详情/命令/撤销/导出已真实化（§8.6/§8.7）；报表 stale/图像懒加载保持 | 导出 10 文件 / 57 行；review 队列 5（标准 4 / 抽检 1） |
 
-**冒烟（`--smoke`，数据根 `/tmp/eg-app-m9`，首帧 208.6ms）**
+**冒烟（`--smoke`，数据根 `<data-dir>/eg-app-m9`，首帧 208.6ms）**
 
 ```
 [smoke-chain] 基础夹具：fixtures/paper-20q 试卷（20 题 / 3 学生）；真实 import+persist：文件 9
@@ -398,6 +398,52 @@ EXAM_GRADING_DATA_DIR=<data-dir>/eg-app-s1 ./target/release/eg-app --smoke
 2. **redo 持久化（保持内存）**：platform v3 只提供 undo 栈的 append/pop（LIFO），没有按动作过滤查询或 redo 表；把 redo 反向条目塞进同一 undo 栈会被后续 `pop_undo` 误当撤销弹出，破坏撤销语义；app 又不能直接引入 DB 驱动（`gates::app_does_not_depend_on_database_driver` 禁止）。因此 redo 仍为进程内暂存（重启丢失），已在 `platform_adapters::PlatformUndoStore` 注明；TODO：platform 增加 redo 表或带动作过滤的弹出 API。
 3. **structurer 真实接入**：规则页「模型整理」仍显式失败（提示「需要本地模型/inference 整理角色」）；手写直译→校验→确认路径可用。接 inference structurer 角色（严格 Schema、最多 1 次修复、只产草稿）为后续任务。
 4. 其余沿用：图像证据懒加载最小版、app 组合根接入后导出的报表联动、UI 键盘/IME 人工验收（M9 仍 🟡 的依据）。
+
+### 8.10 redo 持久化 + structurer 接入（2026-11-09，task-67）
+
+**redo 持久化（platform v4）**
+
+| 项 | 实现 |
+|---|---|
+| 栈存储 | `PlatformUndoStore` 删除进程内 `Mutex<Vec<UndoEntry>>`：`push_redo/pop_redo/clear_redo/redo_len` 全部走 platform v4 `review_redo` 表（`repo::push_redo/pop_redo/list_redo/clear_redo`）；undo 仍走 `review_undo` 表 |
+| 语义 | 新复核命令：ReviewService 调 `clear_redo`（清空可重做）→业务/审计→`push_undo`；撤销：`pop_undo`→应用反向→`push_redo`；重做：`pop_redo`→应用前向→`push_undo`（eg-review 既有调用顺序，本轮只替换适配器持久化） |
+| UI | 新增 `Event::ReviewHistory{undo_len, redo_len}`（复核页载入/每次命令后回投）；重做按钮 `review.redo` 可用性 = `redo_len > 0`（`list_redo` 非空），撤销按钮用 `undo_len` |
+| 重启恢复 | 测试 `platform_adapters::tests::redo_stack_persists_across_platform_reopen`：写 2 条 redo→drop 平台→重新 `Platform::open`→`redo_len==2`、`pop_redo` 成功、`clear_redo` 归零（69 tests 全绿） |
+| 冒烟断言 | 撤销后 redo=1 → 重做后 redo=0 → 再撤销 redo=1 → 新命令后 redo=0（clear_redo 生效） |
+
+**已知限制**：eg-review 的 `UndoStore` trait 方法（clear/push/pop）在 ReviewService 中位于业务事务之外，app 适配器只能各自 `db.write`，无法与审计/业务放进同一事务；极端崩溃窗口可能「命令已落库但 undo 未入栈」（或反之）。彻底解决需 eg-review 暴露事务内回调入口（上游改动，未做）。
+
+**structurer 接入（`eg-rubric::StructurerPort`）**
+
+| 项 | 实现 |
+|---|---|
+| 端口 | `RulesBundle::structured`：`render_structurer_prompt`→`StructurerPort`→`parse_structurer_output`（严格 Schema v1、拒绝未知字段、criterion/分值/依赖校验）；解析失败**至多 1 次**机械修复（`StructurerAttempt::Repair` + violations），仍失败→`RulesFailed`（显式、保留原文） |
+| 后端 | 内置 `FixtureStructurer`（无真实模型）：确定性生成 1 个评分项（分值=题满分），`model_call_id` 由提示词哈希确定性派生；原文含 `!invalid` 时故意输出非法 Schema（验证修复上限与显式失败）。**不静默降级到其他模型**；真实模型接入点 = 用 `InferenceService::complete + ExpectedSchema::Structurer` 替换该 port（TODO） |
+| 产出 | 仅 `DraftSource::ModelStructured` 草稿（`model_call_id` 必填），**绝不生成生效 Rubric**；教师确认恒开；失败保留原文 |
+| 规则页 | 「模型整理」动作（`rules.structure`）现在真的调用 structurer：空原文→显式提示；成功→草稿+静态校验问题；失败→`RulesFailed` 文案（含违规摘要） |
+| 冒烟断言 | 合法原文→`RulesDraft`（model_call_id 非空）；`!invalid`→`RulesFailed`；structurer 断言 2/2 |
+
+**冒烟（`--smoke`，`<data-dir>/eg-app-r2`）关键行**
+
+```
+[smoke-chain] ... redo 往返：撤销后 redo=1，重做后 redo=0，再撤销 redo=1，新命令后 redo=0（通过）；
+redo 断言：通过（持久化语义：撤销→push_redo、重做→pop_redo+push_undo、新命令 clear_redo）；
+structurer：合法原文→草稿（ModelStructured）；故障注入→显式失败；
+structurer 断言：2/2 通过（只产草稿，永不生效）；... 报表已导出 ...（10 个文件，57 行）
+```
+
+**门禁（本轮实测）**
+
+- `cargo test -p eg-app`：69 passed / 0 failed（新增 redo 重启恢复测试）；
+- `cargo clippy -p eg-app --all-targets -- -D warnings`：0 errors；
+- `cargo fmt -p eg-app -- --check`：通过；
+- `cargo build -p eg-app --release`：通过；`EXAM_GRADING_DATA_DIR=<data-dir>/eg-app-r2 ./target/release/eg-app --smoke` 退出码 0。
+
+**剩余 TODO**
+
+1. structurer 真实模型后端：port 已就绪，需在组合根装配 `eg-inference`（模型注册/任务授权/预算/ModelCall 落库），并处理「无模型/未配置」显式提示；当前 fixture 后端仅用于冒烟/测试。
+2. undo/redo 与业务/审计单事务：需 eg-review 提供事务内接口（上游）。
+3. 复核页重做按钮的可用性刷新依赖 `ReviewHistory` 事件（载入/命令后）；真实 UI 键盘 E2E 仍待人工验收（M9 保持 🟡）。
 
 ## 9. 复现命令
 

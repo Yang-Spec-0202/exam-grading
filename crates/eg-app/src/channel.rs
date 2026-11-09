@@ -432,6 +432,13 @@ pub(crate) enum Event {
         /// 资产文件绝对路径。
         path: String,
     },
+    /// 撤销/重做可用性（platform 持久栈长度；用于按钮可用性与提示）。
+    ReviewHistory {
+        /// 可撤销步数。
+        undo_len: u32,
+        /// 可重做步数。
+        redo_len: u32,
+    },
     /// 报表导出成功（清 stale 并展示路径/行数）。
     ReportExported {
         /// 中文摘要。
@@ -479,7 +486,8 @@ impl Event {
             | Self::ConsentRevoked { .. }
             | Self::ConsentFailed { .. }
             | Self::LogRows { .. }
-            | Self::DiagnosticsExported { .. } => None,
+            | Self::DiagnosticsExported { .. }
+            | Self::ReviewHistory { .. } => None,
         }
     }
 
@@ -519,6 +527,7 @@ impl Event {
             | Self::ConsentRegistered { .. }
             | Self::ConsentRevoked { .. }
             | Self::LogRows { .. }
+            | Self::ReviewHistory { .. }
             | Self::ReviewImage { .. } => false,
         }
     }

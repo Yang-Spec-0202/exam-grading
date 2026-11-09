@@ -51,6 +51,7 @@ fn run(
 ) {
     let mut review_ids: Vec<eg_domain::GradeId> = Vec::new();
     let mut rules = RulesBundle::new();
+    let mut rules_raw = String::new();
     let mut review_index: usize = 0;
     emit_initial(&platform, &events, strings);
     while let Ok(command) = commands.recv() {
@@ -125,6 +126,7 @@ fn run(
                     if let Some(image) = services::review_image_event(&platform, *grade_id) {
                         events.send(image);
                     }
+                    emit_review_history(&platform, &events);
                 }
             }
             Command::ReviewCommand {
@@ -158,6 +160,7 @@ fn run(
                     if let Some(image) = services::review_image_event(&platform, *grade_id) {
                         events.send(image);
                     }
+                    emit_review_history(&platform, &events);
                 }
             }
             Command::SamplingScope { scope } => {
@@ -169,14 +172,18 @@ fn run(
                 events.send(Event::ReviewNotice { message });
             }
             Command::RulesRaw { text } => {
-                let _ = text;
+                rules_raw = text;
             }
-            Command::RulesStructure => events.send(Event::RulesFailed {
-                message: "规则整理需要本地模型（inference 侧整理角色接入后启用）；\
-                          当前可先用手写直译草稿完成确认流程"
-                    .to_owned(),
-                model_call_id: String::new(),
-            }),
+            Command::RulesStructure => {
+                if rules_raw.trim().is_empty() {
+                    events.send(Event::RulesFailed {
+                        message: "没有规则原文：请先填写原文再整理".to_owned(),
+                        model_call_id: String::new(),
+                    });
+                } else {
+                    events.send(rules.structured(&rules_raw));
+                }
+            }
             Command::RulesHandwritten {
                 raw_text,
                 criterion,
@@ -318,6 +325,15 @@ fn run(
     let _ = platform.close();
 }
 
+/// 回投撤销/重做持久栈长度（UI 按钮可用性；重启后由 platform 恢复）。
+fn emit_review_history(platform: &Platform, events: &EventBus) {
+    let (undo, redo) = services::review_history(platform);
+    events.send(Event::ReviewHistory {
+        undo_len: u32::try_from(undo).unwrap_or(u32::MAX),
+        redo_len: u32::try_from(redo).unwrap_or(u32::MAX),
+    });
+}
+
 fn page_from_code(code: &str) -> Option<PageId> {
     PageId::ALL.into_iter().find(|page| page.code() == code)
 }
@@ -354,6 +370,7 @@ fn page_load(
                 if let Some(image) = services::review_image_event(platform, *grade_id) {
                     events.send(image);
                 }
+                emit_review_history(platform, events);
             }
         }
         PageId::Consent => events.send(Event::ConsentRows {

@@ -1129,6 +1129,12 @@ fn page_action_commands(state: &Arc<Mutex<AppState>>, id: &str) -> Vec<Command> 
             reason: None,
             text: None,
         }],
+        "review.redo" => vec![Command::ReviewCommand {
+            kind: "redo".to_owned(),
+            score: None,
+            reason: None,
+            text: None,
+        }],
         "review.undo" => vec![Command::ReviewCommand {
             kind: "undo".to_owned(),
             score: None,

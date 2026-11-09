@@ -2,8 +2,6 @@
 //!
 //! 只做字段映射与事务组合，不写复核业务规则（规则仍在 `eg-review::ReviewService`）。
 
-use std::sync::Mutex;
-
 use eg_domain::{
     Clock, ComparatorTrace, ComparatorTraceId, ExcludeReason, GradeId, GradeRecord, ModelCall,
     ModelCallId, QuestionId, SubmissionExclusion, SubmissionId, Timestamp, Ulid,
@@ -235,11 +233,10 @@ impl AuditSink for PlatformAuditSink<'_> {
     }
 }
 
-/// 撤销栈：undo 持久化到 platform，redo 暂存进程内（platform 无 redo 表，记 TODO）。
+/// 撤销/重做栈：undo 与 redo 都持久化到 platform v4（重启后可继续撤销/重做）。
 pub(crate) struct PlatformUndoStore<'a> {
     platform: &'a Platform,
     depth: usize,
-    redo: Mutex<Vec<UndoEntry>>,
 }
 
 impl<'a> PlatformUndoStore<'a> {
@@ -247,7 +244,6 @@ impl<'a> PlatformUndoStore<'a> {
         Self {
             platform,
             depth: depth.max(50),
-            redo: Mutex::new(Vec::new()),
         }
     }
 
@@ -370,33 +366,58 @@ impl UndoStore for PlatformUndoStore<'_> {
     }
 
     fn push_redo(&self, entry: UndoEntry) {
-        if let Ok(mut redo) = self.redo.lock() {
-            if redo.len() >= self.depth {
-                redo.remove(0);
-            }
-            redo.push(entry);
-        }
+        let Ok(id) = self.platform.ids().next_ulid() else {
+            return;
+        };
+        let Ok(command_id) = self.platform.ids().next_ulid() else {
+            return;
+        };
+        let (entity_type, entity_id, _label, payload) = Self::encode(&entry);
+        let stored = repo::RedoEntry {
+            id,
+            command_id: command_id.to_string(),
+            action: "review.redo".to_owned(),
+            entity_type,
+            entity_id,
+            payload: payload.clone(),
+            created_at: self.platform.clock().now(),
+        };
+        let _ = self.depth;
+        let _ = self
+            .platform
+            .db()
+            .write(move |tx| repo::push_redo(tx, &stored));
     }
 
     fn pop_redo(&self) -> Option<UndoEntry> {
-        self.redo.lock().ok()?.pop()
+        let stored = self
+            .platform
+            .db()
+            .write(|tx| repo::pop_redo(tx))
+            .ok()
+            .flatten()?;
+        Self::decode(&stored.action, &stored.payload)
     }
 
     fn clear_redo(&self) {
-        if let Ok(mut redo) = self.redo.lock() {
-            redo.clear();
-        }
+        let _ = self
+            .platform
+            .db()
+            .write(|tx| repo::clear_redo(tx).map(|_| ()));
     }
 
     fn undo_len(&self) -> usize {
         self.platform
             .db()
-            .read(|conn| repo::list_undo(conn, 200))
+            .read(|conn| repo::list_undo(conn, 1000))
             .map_or(0, |entries| entries.len())
     }
 
     fn redo_len(&self) -> usize {
-        self.redo.lock().map_or(0, |redo| redo.len())
+        self.platform
+            .db()
+            .read(|conn| repo::list_redo(conn, 1000, None))
+            .map_or(0, |entries| entries.len())
     }
 }
 
@@ -482,4 +503,64 @@ pub(crate) fn clock_of(platform: &Platform) -> &dyn Clock {
 #[must_use]
 pub(crate) fn outcome_label(outcome: AuditOutcome) -> &'static str {
     outcome.as_str()
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
+    use std::sync::Mutex;
+
+    use super::*;
+
+    /// 进程环境变量是全局的：本模块内串行化涉及数据根的测试。
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    fn sampling_entry(seed: u128) -> UndoEntry {
+        UndoEntry::new(
+            UndoKind::SamplingConclusion {
+                grade_id: GradeId::from_ulid(Ulid::from_parts(0, seed)),
+                conclusion: SamplingConclusion::Passed,
+            },
+            "重做持久化测试",
+        )
+    }
+
+    #[test]
+    fn redo_stack_persists_across_platform_reopen() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let root = std::env::temp_dir().join(format!(
+            "eg-app-redo-test-{}-{}",
+            std::process::id(),
+            Ulid::from_parts(0, u128::from(std::process::id()))
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        // Safety：测试内串行修改变量，且仅本测试读取。
+        unsafe {
+            std::env::set_var("EXAM_GRADING_DATA_DIR", &root);
+        }
+        let dirs = eg_platform::DataDirs::resolve().unwrap();
+
+        {
+            let platform = Platform::open(dirs.clone()).unwrap();
+            let store = PlatformUndoStore::new(&platform, 50);
+            store.push_redo(sampling_entry(11));
+            store.push_redo(sampling_entry(12));
+            assert_eq!(store.redo_len(), 2, "写入后应有 2 条 redo");
+        }
+        // 重新打开（模拟重启）：redo 从 platform 表恢复。
+        {
+            let platform = Platform::open(dirs).unwrap();
+            let store = PlatformUndoStore::new(&platform, 50);
+            assert_eq!(store.redo_len(), 2, "重启后 redo 应恢复");
+            assert!(store.pop_redo().is_some(), "重启后应可弹出 redo");
+            assert_eq!(store.redo_len(), 1);
+            store.clear_redo();
+            assert_eq!(store.redo_len(), 0);
+        }
+        unsafe {
+            std::env::remove_var("EXAM_GRADING_DATA_DIR");
+        }
+        let _ = std::fs::remove_dir_all(root);
+    }
 }

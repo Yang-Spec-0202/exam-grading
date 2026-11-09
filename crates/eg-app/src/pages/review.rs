@@ -140,6 +140,12 @@ pub(crate) struct ReviewVm {
     pub(crate) batch_count: u32,
     /// 是否可撤销。
     pub(crate) can_undo: bool,
+    /// 是否可重做。
+    pub(crate) can_redo: bool,
+    /// 可撤销步数。
+    pub(crate) undo_len: u32,
+    /// 可重做步数。
+    pub(crate) redo_len: u32,
     /// 抽检弹窗。
     pub(crate) sampling: SamplingVm,
     /// 导出后已修改提示（空 = 无）。
@@ -180,6 +186,8 @@ pub(crate) struct ReviewPage {
     read_only: bool,
     batch: Vec<usize>,
     undo_available: bool,
+    undo_len: u32,
+    redo_len: u32,
     sampling: SamplingVm,
     export_stale: bool,
     notice: String,
@@ -196,6 +204,13 @@ impl ReviewPage {
     /// 队列计数说明（worker 从 `QueueCounts` 映射）。
     pub(crate) fn set_counts(&mut self, counts: String) {
         self.counts = counts;
+    }
+
+    /// 撤销/重做可用性（platform 持久栈；重启后仍有效）。
+    pub(crate) fn set_history(&mut self, undo_len: usize, redo_len: usize) {
+        self.undo_len = u32::try_from(undo_len).unwrap_or(u32::MAX);
+        self.redo_len = u32::try_from(redo_len).unwrap_or(u32::MAX);
+        self.undo_available = self.undo_len > 0;
     }
 
     /// 不改变判定的提示（命令被服务的只读/冲突规则拒绝等）。
@@ -403,6 +418,7 @@ impl ReviewPage {
             row.batched = self.batch.contains(&index);
         }
         let can_undo = self.undo_available && !self.read_only;
+        let can_redo = self.redo_len > 0 && !self.read_only;
         ReviewVm {
             visible: false,
             rows,
@@ -433,6 +449,9 @@ impl ReviewPage {
             read_only: self.read_only,
             batch_count: u32::try_from(self.batch.len()).unwrap_or(u32::MAX),
             can_undo,
+            can_redo,
+            undo_len: self.undo_len,
+            redo_len: self.redo_len,
             sampling: self.sampling.clone(),
             export_stale: if self.export_stale {
                 strings.review_export_stale.to_owned()
@@ -466,6 +485,11 @@ impl ReviewPage {
                         id: "review.undo".to_owned(),
                         label: strings.action_undo.to_owned(),
                         enabled: can_undo,
+                    },
+                    ActionVm {
+                        id: "review.redo".to_owned(),
+                        label: strings.action_redo.to_owned(),
+                        enabled: can_redo,
                     },
                 ];
                 if self.read_only {

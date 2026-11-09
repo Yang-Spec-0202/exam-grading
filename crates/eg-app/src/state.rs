@@ -586,6 +586,12 @@ impl AppState {
                     self.report_stale = true;
                 }
             }
+            Event::ReviewHistory { undo_len, redo_len } => {
+                self.review_page_mut().set_history(
+                    usize::try_from(undo_len).unwrap_or(usize::MAX),
+                    usize::try_from(redo_len).unwrap_or(usize::MAX),
+                );
+            }
             Event::ReviewImage { path } => {
                 self.review_image_note = path;
             }

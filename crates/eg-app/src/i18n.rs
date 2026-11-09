@@ -195,6 +195,8 @@ pub(crate) struct Strings {
     pub(crate) action_batch_accept: &'static str,
     /// 复核页：撤销。
     pub(crate) action_undo: &'static str,
+    /// 复核：重做。
+    pub(crate) action_redo: &'static str,
     /// 复核页：抽检通过。
     pub(crate) action_sampling_pass: &'static str,
     /// 规则页：终态不可编辑。
@@ -388,6 +390,7 @@ pub(crate) static ZH_CN: Strings = Strings {
     action_regrade_text: "修文本重判",
     action_batch_accept: "批量接受",
     action_undo: "撤销",
+    action_redo: "重做",
     action_sampling_pass: "抽检通过",
     rules_terminal: "已确认/已拒绝的规则为终态，不可再编辑；如需修改请新建草稿",
     rules_need_raw_text: "请先填写规则原文",

@@ -22,6 +22,10 @@ use eg_review::{
 use eg_rubric::{
     DraftSource, InMemoryRubricStore, RecordingAudit, RubricEngine, RubricSettings, RubricStore,
     SequentialIds,
+    structurer::{
+        StructurerAttempt, StructurerInvocation, StructurerPort, StructurerReply,
+        StructurerRequest, infer_mode, parse_structurer_output, render_structurer_prompt,
+    },
 };
 
 use crate::channel::{Event, EventBus, NoticeLevel};
@@ -315,6 +319,19 @@ pub(crate) fn run_import(platform: &Platform, paths: Vec<PathBuf>, events: &Even
             events.send(Event::ImportFailed { message });
         }
     }
+}
+
+/// 撤销/重做持久栈长度（platform v4 `list_undo`/`list_redo`）。
+pub(crate) fn review_history(platform: &Platform) -> (usize, usize) {
+    let undo = platform
+        .db()
+        .read(|conn| eg_platform::repo::list_undo(conn, 1000))
+        .map_or(0, |entries| entries.len());
+    let redo = platform
+        .db()
+        .read(|conn| eg_platform::repo::list_redo(conn, 1000, None))
+        .map_or(0, |entries| entries.len());
+    (undo, redo)
 }
 
 /// 复核图像证据：取证据摘要第一张原图的 platform 资产路径（懒加载）。
@@ -791,6 +808,7 @@ pub(crate) fn review_execute(
             note: None,
         },
         "undo" => ReviewCommand::Undo,
+        "redo" => ReviewCommand::Redo,
         other => {
             return Event::ReviewNotice {
                 message: format!("未实现的复核命令：{other}"),
@@ -898,6 +916,121 @@ impl RulesBundle {
             &self.settings,
         )
         .ok()
+    }
+
+    /// 模型整理：渲染提示词 → structurer 端口（严格 Schema，至多 1 次机械修复）→
+    /// 只组装 `ModelStructured` 草稿（绝不生效）；失败显式返回并保留原文。
+    pub(crate) fn structured(&mut self, raw_text: &str) -> Event {
+        let question = Self::fixture_question();
+        let request = StructurerRequest {
+            raw_text,
+            question_kind: question.kind,
+            max_score: question.max_score,
+            template_skeleton: None,
+        };
+        let prompt = render_structurer_prompt(&request);
+        let port = FixtureStructurer;
+        let invocation = StructurerInvocation {
+            prompt: &prompt,
+            request: &request,
+            attempt: StructurerAttempt::Initial,
+            previous_output: None,
+            violations: &[],
+        };
+        let reply = match port.structure(&invocation) {
+            Ok(reply) => reply,
+            Err(error) => {
+                return Event::RulesFailed {
+                    message: format!("规则整理调用失败（未降级到其他模型）：{error}"),
+                    model_call_id: String::new(),
+                };
+            }
+        };
+        let items = match parse_structurer_output(&reply.raw_output) {
+            Ok(items) => items,
+            Err(violations) => {
+                // 至多 1 次机械修复（只反馈结构违规，不重写语义）。
+                let repair = StructurerInvocation {
+                    prompt: &prompt,
+                    request: &request,
+                    attempt: StructurerAttempt::Repair,
+                    previous_output: Some(&reply.raw_output),
+                    violations: &violations,
+                };
+                match port.structure(&repair) {
+                    Ok(repaired) => match parse_structurer_output(&repaired.raw_output) {
+                        Ok(items) => items,
+                        Err(repaired_violations) => {
+                            return Event::RulesFailed {
+                                message: format!(
+                                    "规则整理输出不合法（已重试 1 次）：{}；原始输出已保留，原文未修改",
+                                    repaired_violations.join("；")
+                                ),
+                                model_call_id: repaired.model_call_id.to_string(),
+                            };
+                        }
+                    },
+                    Err(error) => {
+                        return Event::RulesFailed {
+                            message: format!(
+                                "规则整理修复调用失败：{error}；违规：{}；原始输出已保留",
+                                violations.join("；")
+                            ),
+                            model_call_id: reply.model_call_id.to_string(),
+                        };
+                    }
+                }
+            }
+        };
+        let mode = infer_mode(question.kind, &items);
+        let Some(engine) = self.engine() else {
+            return Event::RulesFailed {
+                message: "规则引擎初始化失败".to_owned(),
+                model_call_id: reply.model_call_id.to_string(),
+            };
+        };
+        let source = DraftSource::ModelStructured {
+            raw_text: raw_text.to_owned(),
+            items,
+            mode,
+            partial_choice: None,
+            model_call_id: reply.model_call_id,
+        };
+        match engine.create_draft(&question, source) {
+            Ok(stored) => {
+                let draft_id = stored.draft.id;
+                let findings: Vec<FindingVm> = engine
+                    .report_for(&stored)
+                    .findings
+                    .iter()
+                    .map(finding_vm)
+                    .collect();
+                let items: Vec<RuleItemVm> = stored
+                    .draft
+                    .items
+                    .iter()
+                    .map(|item| RuleItemVm {
+                        criterion: item.criterion.clone(),
+                        points: format!("{:.1}", item.points.as_milli() as f64 / 1000.0),
+                        required: item.required,
+                    })
+                    .collect();
+                self.draft_id = Some(draft_id);
+                Event::RulesDraft {
+                    draft_id: draft_id.to_string(),
+                    model_call_id: stored
+                        .draft
+                        .model_call_id
+                        .map_or_else(String::new, |id| id.to_string()),
+                    items,
+                    findings,
+                }
+            }
+            Err(error) => Event::RulesFailed {
+                message: format!("整理草稿创建失败：{error}"),
+                model_call_id: String::new(),
+            },
+        }
     }
 
     /// 手写直译：由 UI 提供的判据/分值创建草稿并跑静态校验。
@@ -1818,6 +1951,59 @@ pub(crate) fn run_smoke_chain(
             other => lines.push(format!("复核改分：{other:?}")),
         }
     }
+    // 撤销/重做持久化往返（platform v4 redo 表）：撤销→重做→撤销；新命令后 redo 失效。
+    let mut redo_checks = Vec::new();
+    if let Some(grade_id) = ids.first() {
+        let _ = review_execute(platform, *grade_id, "undo", None, None, None);
+        let after_undo = review_history(platform).1;
+        let _ = review_execute(platform, *grade_id, "redo", None, None, None);
+        let after_redo = review_history(platform).1;
+        let _ = review_execute(platform, *grade_id, "undo", None, None, None);
+        let after_second_undo = review_history(platform).1;
+        if let Some(other) = ids.get(1) {
+            let _ = review_execute(platform, *other, "accept", None, None, None);
+        }
+        let after_new_command = review_history(platform).1;
+        let ok =
+            after_undo >= 1 && after_redo == 0 && after_second_undo >= 1 && after_new_command == 0;
+        redo_checks.push(ok);
+        lines.push(format!(
+            "redo 往返：撤销后 redo={after_undo}，重做后 redo={after_redo}，再撤销 redo={after_second_undo}，新命令后 redo={after_new_command}（{}）",
+            if ok { "通过" } else { "失败" }
+        ));
+    }
+    lines.push(if redo_checks.iter().all(|ok| *ok) && !redo_checks.is_empty() {
+        "redo 断言：通过（持久化语义：撤销→push_redo、重做→pop_redo+push_undo、新命令 clear_redo）".to_owned()
+    } else {
+        "redo 断言失败".to_owned()
+    });
+
+    // structurer：原文→严格 Schema 草稿（ModelStructured，不生效）；故障注入→显式失败（至多 1 次修复）。
+    let mut rules = RulesBundle::new();
+    let structured = rules.structured("每题按步骤给分，每步 2 分（夹具整理）");
+    let structurer_ok =
+        matches!(&structured, Event::RulesDraft { model_call_id, .. } if !model_call_id.is_empty());
+    let invalid = rules.structured("!invalid");
+    let structurer_failed = matches!(invalid, Event::RulesFailed { .. });
+    lines.push(format!(
+        "structurer：合法原文→{}；故障注入→{}",
+        if structurer_ok {
+            "草稿（ModelStructured）"
+        } else {
+            "失败"
+        },
+        if structurer_failed {
+            "显式失败"
+        } else {
+            "未失败"
+        }
+    ));
+    lines.push(if structurer_ok && structurer_failed {
+        "structurer 断言：2/2 通过（只产草稿，永不生效）".to_owned()
+    } else {
+        "structurer 断言失败".to_owned()
+    });
+
     let mut exported = None;
     match export_report(platform) {
         Ok(summary) => {
@@ -1827,4 +2013,59 @@ pub(crate) fn run_smoke_chain(
         Err(error) => lines.push(format!("导出失败：{error}")),
     }
     (lines.join("；"), exported, import_view)
+}
+
+// ---------------------------------------------------------------------------
+// structurer 端口：内置 fixture 后端（无真实模型；不静默降级到其他模型）
+// ---------------------------------------------------------------------------
+
+/// 内置 fixture structurer：按固定 Schema 生成 1 个评分项（分值 = 题满分）。
+///
+/// 真实模型接入 TODO：用 `eg_inference::InferenceService::complete` +
+/// `ExpectedSchema::Structurer` 替换本实现；未配置模型时 rules 页显式失败。
+struct FixtureStructurer;
+
+impl StructurerPort for FixtureStructurer {
+    fn structure(
+        &self,
+        invocation: &StructurerInvocation<'_>,
+    ) -> eg_rubric::Result<StructurerReply> {
+        let raw = invocation.request.raw_text;
+        // 测试/冒烟故障注入：原文含 `!invalid` 时返回不符合 Schema 的输出（验证 ≤1 次修复后显式失败）。
+        let invalid = raw.contains("!invalid");
+        let criterion = raw
+            .lines()
+            .map(str::trim)
+            .find(|line| !line.is_empty())
+            .unwrap_or("评分项")
+            .chars()
+            .take(80)
+            .collect::<String>();
+        let payload = if invalid {
+            serde_json::json!({ "items": [] }).to_string()
+        } else {
+            serde_json::json!({
+                "items": [{
+                    "criterion": criterion,
+                    "points": invocation.request.max_score.as_milli(),
+                    "required": true,
+                    "depends_on": []
+                }]
+            })
+            .to_string()
+        };
+        // 模型调用 id：由提示词哈希与原文确定性派生（fixture 无真实调用，但仍可复现）。
+        let hash = invocation.prompt.hash.to_hex();
+        let bytes = hash.as_bytes();
+        let mut value = [0_u8; 16];
+        for (index, byte) in bytes.iter().take(32).enumerate() {
+            value[index % 16] ^= *byte;
+        }
+        let model_call_id =
+            eg_domain::ModelCallId::from_ulid(Ulid::from_parts(0, u128::from_be_bytes(value)));
+        Ok(StructurerReply {
+            model_call_id,
+            raw_output: payload,
+        })
+    }
 }
