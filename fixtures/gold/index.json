@@ -1,0 +1,188 @@
+{
+  "schema_version": 1,
+  "generator_version": "1.0.0",
+  "seed": 20261109,
+  "created_at": "2026-11-09T00:00:00Z",
+  "students": [
+    {
+      "student_id": "stu-A",
+      "name": "学生A",
+      "student_no": "GOLD-0001"
+    },
+    {
+      "student_id": "stu-B",
+      "name": "学生B",
+      "student_no": "GOLD-0002"
+    },
+    {
+      "student_id": "stu-C",
+      "name": "学生C",
+      "student_no": "GOLD-0003"
+    },
+    {
+      "student_id": "stu-D",
+      "name": "学生D",
+      "student_no": "GOLD-0004"
+    },
+    {
+      "student_id": "stu-E",
+      "name": "学生E",
+      "student_no": "GOLD-0005"
+    },
+    {
+      "student_id": "stu-F",
+      "name": "学生F",
+      "student_no": "GOLD-0006"
+    }
+  ],
+  "files": {
+    "objective-500.json": "cf411e632c3d022a8198b1c4b35ab8748be8ca1c624240f4df298b9f83b2bbac",
+    "solution-200.json": "b2c7ce3444284f431ec8ad643c2fd0793c0208938e4a3492f08c7afcc0aee97f"
+  },
+  "objective": {
+    "count": 540,
+    "total": 540,
+    "by_kind": {
+      "fill_in_blank": 90,
+      "multiple_choice": 130,
+      "numeric_only": 95,
+      "single_choice": 130,
+      "true_false": 95
+    },
+    "by_perturbation": {
+      "clean": 75,
+      "fullwidth": 53,
+      "latex_variant": 22,
+      "missing": 76,
+      "missing_low_confidence": 17,
+      "ocr_noise": 75,
+      "ocr_noise_review": 38,
+      "partial_choice_2of3": 16,
+      "partial_choice_2opt": 17,
+      "spacing": 77,
+      "wrong_choice": 74
+    },
+    "by_status": {
+      "auto_accept": 410,
+      "manual": 92,
+      "needs_review": 38
+    },
+    "by_route": {
+      "manual": 92,
+      "rule_only": 317,
+      "rule_then_model": 131
+    },
+    "kind_x_perturbation": {
+      "fill_in_blank": {
+        "clean": 14,
+        "fullwidth": 8,
+        "latex_variant": 8,
+        "missing": 14,
+        "ocr_noise": 13,
+        "ocr_noise_review": 6,
+        "spacing": 14,
+        "wrong_choice": 13
+      },
+      "multiple_choice": {
+        "clean": 16,
+        "fullwidth": 16,
+        "missing": 16,
+        "ocr_noise": 16,
+        "partial_choice_2of3": 16,
+        "partial_choice_2opt": 17,
+        "spacing": 17,
+        "wrong_choice": 16
+      },
+      "numeric_only": {
+        "clean": 13,
+        "fullwidth": 13,
+        "latex_variant": 14,
+        "missing": 14,
+        "ocr_noise": 13,
+        "spacing": 14,
+        "wrong_choice": 14
+      },
+      "single_choice": {
+        "clean": 16,
+        "fullwidth": 16,
+        "missing": 16,
+        "missing_low_confidence": 17,
+        "ocr_noise": 17,
+        "ocr_noise_review": 16,
+        "spacing": 16,
+        "wrong_choice": 16
+      },
+      "true_false": {
+        "clean": 16,
+        "missing": 16,
+        "ocr_noise": 16,
+        "ocr_noise_review": 16,
+        "spacing": 16,
+        "wrong_choice": 15
+      }
+    },
+    "file": "objective-500.json"
+  },
+  "solution": {
+    "count": 230,
+    "total": 230,
+    "by_kind": {
+      "calculation": 130,
+      "proof": 53,
+      "short_answer": 47
+    },
+    "by_perturbation": {
+      "answer_key_omitted": 5,
+      "answer_only": 22,
+      "clean": 33,
+      "low_confidence": 25,
+      "missing_step": 24,
+      "multi_solution": 23,
+      "rubric_only": 5,
+      "symbol_variant": 32,
+      "uncalibrated": 22,
+      "unit_missing": 14,
+      "wrong_intermediate": 25
+    },
+    "by_status": {
+      "auto_accept": 178,
+      "manual": 5,
+      "needs_review": 47
+    },
+    "by_route": {
+      "manual": 5,
+      "rubric_itemized": 225
+    },
+    "kind_x_perturbation": {
+      "calculation": {
+        "answer_only": 14,
+        "clean": 15,
+        "low_confidence": 15,
+        "missing_step": 14,
+        "multi_solution": 15,
+        "symbol_variant": 14,
+        "uncalibrated": 14,
+        "unit_missing": 14,
+        "wrong_intermediate": 15
+      },
+      "proof": {
+        "clean": 10,
+        "low_confidence": 10,
+        "missing_step": 10,
+        "rubric_only": 3,
+        "symbol_variant": 10,
+        "wrong_intermediate": 10
+      },
+      "short_answer": {
+        "answer_key_omitted": 5,
+        "answer_only": 8,
+        "clean": 8,
+        "multi_solution": 8,
+        "rubric_only": 2,
+        "symbol_variant": 8,
+        "uncalibrated": 8
+      }
+    },
+    "file": "solution-200.json"
+  }
+}
