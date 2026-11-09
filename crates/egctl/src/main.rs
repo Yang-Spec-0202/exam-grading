@@ -17,7 +17,7 @@
     reason = "CLI 入口需要向标准输出报告结果；子命令统一返回 Result<u8, String> 便于分发"
 )]
 
-use egctl::{bench, docs_check, doctor, eval, replay, service, util};
+use egctl::{bench, docs_check, doctor, eval, eval_real, replay, service, util};
 use std::path::PathBuf;
 use std::process::ExitCode;
 
@@ -61,6 +61,11 @@ struct Args {
     gold: Option<PathBuf>,
     limit_objective: Option<usize>,
     limit_solution: Option<usize>,
+    real_judge: bool,
+    judge_endpoint: Option<String>,
+    model: Option<String>,
+    sample: Option<usize>,
+    concurrency: usize,
     command: Command,
 }
 
@@ -328,6 +333,35 @@ fn run_eval(args: &Args) -> Result<u8, String> {
         .gold
         .clone()
         .unwrap_or_else(|| PathBuf::from("fixtures/gold"));
+    if args.real_judge {
+        let options = eval_real::Options {
+            gold,
+            endpoint: args
+                .judge_endpoint
+                .clone()
+                .unwrap_or_else(|| "http://127.0.0.1:8082/v1".to_owned()),
+            model: args
+                .model
+                .clone()
+                .unwrap_or_else(|| "qwen3.5-4b-instruct".to_owned()),
+            sample: args.sample.or(Some(60)),
+            concurrency: args.concurrency,
+            timeout: std::time::Duration::from_secs(20),
+        };
+        let report = eval_real::run(&options)?;
+        if args.json {
+            let value = report.to_json();
+            let text = serde_json::to_string_pretty(&value).unwrap_or_default();
+            if let Some(out) = &args.out {
+                std::fs::write(out, &text)
+                    .map_err(|error| format!("写 {} 失败：{error}", out.display()))?;
+            }
+            println!("{text}");
+        } else {
+            println!("{}", report.render_human());
+        }
+        return Ok(0);
+    }
     let options = eval::Options {
         gold,
         max_objective: args.limit_objective,
@@ -363,6 +397,11 @@ fn parse_args() -> Result<Args, String> {
     let mut gold = None;
     let mut limit_objective = None;
     let mut limit_solution = None;
+    let mut real_judge = false;
+    let mut judge_endpoint = None;
+    let mut model = None;
+    let mut sample = None;
+    let mut concurrency = 1usize;
     let mut tokens: Vec<String> = Vec::new();
 
     let mut args = std::env::args().skip(1);
@@ -395,6 +434,37 @@ fn parse_args() -> Result<Args, String> {
                 max_sha_mib = value
                     .parse()
                     .map_err(|_| format!("--max-sha-mib 非法：{value}"))?;
+            }
+            "--real-judge" => real_judge = true,
+            "--judge-endpoint" => {
+                judge_endpoint = Some(
+                    args.next()
+                        .ok_or_else(|| "--judge-endpoint 需要一个 URL".to_owned())?,
+                );
+            }
+            "--model" => {
+                model = Some(
+                    args.next()
+                        .ok_or_else(|| "--model 需要一个模型名".to_owned())?,
+                );
+            }
+            "--sample" => {
+                let value = args
+                    .next()
+                    .ok_or_else(|| "--sample 需要一个整数（0=全量）".to_owned())?;
+                sample = Some(
+                    value
+                        .parse()
+                        .map_err(|_| format!("--sample 非法：{value}"))?,
+                );
+            }
+            "--concurrency" => {
+                let value = args
+                    .next()
+                    .ok_or_else(|| "--concurrency 需要一个整数".to_owned())?;
+                concurrency = value
+                    .parse()
+                    .map_err(|_| format!("--concurrency 非法：{value}"))?;
             }
             "--gold" => {
                 gold = Some(PathBuf::from(
@@ -479,6 +549,11 @@ fn parse_args() -> Result<Args, String> {
         gold,
         limit_objective,
         limit_solution,
+        real_judge,
+        judge_endpoint,
+        model,
+        sample,
+        concurrency,
         command,
     })
 }
@@ -498,7 +573,7 @@ fn print_help() {
            restore <备份目录>     从备份恢复数据库（需桌面端退出）\n\
            diagnostics export     导出诊断包（需桌面端退出）\n\
            acceptance             S1 端到端自动化验收（fixtures→导入→识别→对齐→判分→复核→导出）\n\
-           eval                   S2/S3/S5 合成金标评估（默认 --gold fixtures/gold；--json/--out）\n\
+           eval                   S2/S3/S5 合成金标评估（--gold fixtures/gold；--real-judge 接本地 4B）\n\
            version / --version    版本\n\
          \n\
          全局选项：\n\
@@ -512,6 +587,11 @@ fn print_help() {
            --gold <目录>          eval 金标目录（默认 fixtures/gold）\n\
            --limit-objective <N>  eval 仅取前 N 条客观题\n\
            --limit-solution <N>   eval 仅取前 N 条解答题\n\
+           --real-judge           eval 走真实本地 judge（S3 ECE 复测）\n\
+           --judge-endpoint <URL> 真实 judge /v1 端点（默认 http://127.0.0.1:8082/v1）\n\
+           --model <name>         真实 judge 模型名（默认 qwen3.5-4b-instruct）\n\
+           --sample <N>           eval --real-judge 抽样条数（默认 60；0=全量）\n\
+           --concurrency <N>      eval --real-judge 并发请求数（默认 1，≤4）\n\
          \n\
          退出码：0 = OK，2 = WARN（有降级/未就绪项），1 = ERROR",
         env!("CARGO_PKG_VERSION")
