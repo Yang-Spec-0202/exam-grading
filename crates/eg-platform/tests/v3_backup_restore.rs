@@ -32,10 +32,14 @@ fn v3_tables_survive_backup_and_restore() {
     let temp = tempfile::tempdir().unwrap();
     let dirs = DataDirs::with_root(temp.path().join("data")).unwrap();
     let clock = clock();
-    assert_eq!(schema::SCHEMA_VERSION, 3, "本测试针对 schema v3");
+    // v4 起本测试作为「新表随备份恢复」回归（当前目标版本动态断言）。
+    assert_eq!(schema::SCHEMA_VERSION, 4, "当前 schema v4");
 
     let platform = Platform::open_with(dirs.clone(), clock.clone()).unwrap();
-    assert_eq!(platform.db().schema_version().unwrap(), 3);
+    assert_eq!(
+        platform.db().schema_version().unwrap(),
+        schema::SCHEMA_VERSION
+    );
 
     // 造 v3 数据：撤销栈 2 条、导出记录 1 条、幂等 1 条、断点 1 条、审计命令 1 条。
     let undo_first = repo::UndoEntry {
@@ -114,6 +118,7 @@ fn v3_tables_survive_backup_and_restore() {
         .unwrap();
     for table in [
         "review_undo",
+        "review_redo",
         "export_record",
         "grade_idempotency",
         "grade_progress",
@@ -152,7 +157,7 @@ fn v3_tables_survive_backup_and_restore() {
         .verify_restored(&dirs.database_path(), platform.assets())
         .unwrap();
     assert!(verification.integrity_ok);
-    assert_eq!(verification.schema_version, 3);
+    assert_eq!(verification.schema_version, schema::SCHEMA_VERSION);
     assert_eq!(verification.table_counts, backup.manifest.table_counts);
     assert!(verification.ok());
 

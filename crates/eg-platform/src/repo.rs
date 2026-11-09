@@ -1640,6 +1640,37 @@ pub struct UndoEntry {
     pub created_at: Timestamp,
 }
 
+/// 重做栈条目（复核命令反向操作；与 [`UndoEntry`] 对称）。
+///
+/// 语义：撤销命令时写 `review_undo`；重做（红o）命令时写 `review_redo`；
+/// 任何新的复核命令必须在同一事务内调用 [`clear_redo`]，保证「新操作后重做失效」。
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct RedoEntry {
+    /// 条目 id。
+    pub id: Ulid,
+    /// 命令幂等键（与审计条目对应）。
+    pub command_id: String,
+    /// 动作（如 `review.accept`）。
+    pub action: String,
+    /// 实体类型。
+    pub entity_type: String,
+    /// 实体 id。
+    pub entity_id: String,
+    /// 反向操作负载（由 review 定义；平台不解释）。
+    pub payload: serde_json::Value,
+    /// 入栈时间。
+    pub created_at: Timestamp,
+}
+
+/// 重做栈分页游标（上一页最后一条的 `(created_at, id)`；同时间按 id 稳定）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RedoCursor {
+    /// 上一页最后一条的创建时间。
+    pub created_at: Timestamp,
+    /// 上一页最后一条 id（同一时间的次级排序键）。
+    pub id: Ulid,
+}
+
 /// 导出记录（审计 + 摘要 + 重放比较）。
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ExportRecord {
@@ -2421,6 +2452,177 @@ pub fn list_undo(conn: &Connection, limit: usize) -> Result<Vec<UndoEntry>> {
         )?);
     }
     Ok(out)
+}
+
+/// 重做栈入栈（撤销命令事务内调用；与 [`push_undo`] 对称）。
+///
+/// 注意：**不自动清空**；新的复核命令（非撤销/重做）应在同一事务调用 [`clear_redo`]。
+///
+/// # Errors
+///
+/// 序列化/约束失败时返回错误。
+pub fn push_redo(tx: &Transaction<'_>, entry: &RedoEntry) -> Result<()> {
+    tx.execute(
+        "INSERT INTO review_redo(id, command_id, action, entity_type, entity_id, payload,          created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        params![
+            entry.id.to_string(),
+            entry.command_id,
+            entry.action,
+            entry.entity_type,
+            entry.entity_id,
+            json_text(&entry.payload)?,
+            timestamp_text(entry.created_at)
+        ],
+    )
+    .map_err(PlatformError::from)?;
+    Ok(())
+}
+
+type RedoRow = (String, String, String, String, String, String, String);
+
+fn row_to_redo(row: &rusqlite::Row<'_>) -> rusqlite::Result<RedoRow> {
+    Ok((
+        row.get(0)?,
+        row.get(1)?,
+        row.get(2)?,
+        row.get(3)?,
+        row.get(4)?,
+        row.get(5)?,
+        row.get(6)?,
+    ))
+}
+
+fn decode_redo(
+    id: String,
+    command_id: String,
+    action: String,
+    entity_type: String,
+    entity_id: String,
+    payload: String,
+    created: String,
+) -> Result<RedoEntry> {
+    Ok(RedoEntry {
+        id: Ulid::parse(&id)
+            .map_err(|error| PlatformError::DatabaseCorrupt(format!("review_redo.id：{error}")))?,
+        command_id,
+        action,
+        entity_type,
+        entity_id,
+        payload: json_value(&payload, "review_redo.payload")?,
+        created_at: parse_timestamp(&created, "review_redo.created_at")?,
+    })
+}
+
+/// 弹出最近一条重做栈条目（LIFO：按 `(created_at, id)` 降序），并删除。
+///
+/// # Errors
+///
+/// 查询/删除/解析失败时返回错误。
+pub fn pop_redo(tx: &Transaction<'_>) -> Result<Option<RedoEntry>> {
+    let row = tx
+        .query_row(
+            "SELECT id, command_id, action, entity_type, entity_id, payload, created_at              FROM review_redo ORDER BY created_at DESC, id DESC LIMIT 1",
+            [],
+            row_to_redo,
+        )
+        .optional()
+        .map_err(PlatformError::from)?;
+    let Some((id, command_id, action, entity_type, entity_id, payload, created)) = row else {
+        return Ok(None);
+    };
+    let entry = decode_redo(
+        id,
+        command_id,
+        action,
+        entity_type,
+        entity_id,
+        payload,
+        created,
+    )?;
+    tx.execute(
+        "DELETE FROM review_redo WHERE id = ?1",
+        [entry.id.to_string()],
+    )
+    .map_err(PlatformError::from)?;
+    Ok(Some(entry))
+}
+
+/// 列出重做栈（最新在前；`limit=0` 默认 50；`before` 为 `(created_at,id)` 游标）。
+///
+/// 排序键为 `(created_at DESC, id DESC)`；游标用严格小于表示「在该条之后」，
+/// 同 `created_at` 依靠 id 稳定分页，不重复/不遗漏。
+///
+/// # Errors
+///
+/// 查询或解析失败时返回错误。
+pub fn list_redo(
+    conn: &Connection,
+    limit: usize,
+    before: Option<&RedoCursor>,
+) -> Result<Vec<RedoEntry>> {
+    let limit = if limit == 0 { 50 } else { limit };
+    let limit = i64::try_from(limit).unwrap_or(i64::MAX);
+    let mut out = Vec::new();
+    if let Some(cursor) = before {
+        let created = timestamp_text(cursor.created_at);
+        let mut statement = conn
+            .prepare(
+                "SELECT id, command_id, action, entity_type, entity_id, payload, created_at                  FROM review_redo                  WHERE created_at < ?1 OR (created_at = ?1 AND id < ?2)                  ORDER BY created_at DESC, id DESC LIMIT ?3",
+            )
+            .map_err(PlatformError::from)?;
+        let rows = statement
+            .query_map(params![created, cursor.id.to_string(), limit], row_to_redo)
+            .map_err(PlatformError::from)?;
+        for row in rows {
+            let (id, command_id, action, entity_type, entity_id, payload, created) =
+                row.map_err(PlatformError::from)?;
+            out.push(decode_redo(
+                id,
+                command_id,
+                action,
+                entity_type,
+                entity_id,
+                payload,
+                created,
+            )?);
+        }
+    } else {
+        let mut statement = conn
+            .prepare(
+                "SELECT id, command_id, action, entity_type, entity_id, payload, created_at                  FROM review_redo ORDER BY created_at DESC, id DESC LIMIT ?1",
+            )
+            .map_err(PlatformError::from)?;
+        let rows = statement
+            .query_map([limit], row_to_redo)
+            .map_err(PlatformError::from)?;
+        for row in rows {
+            let (id, command_id, action, entity_type, entity_id, payload, created) =
+                row.map_err(PlatformError::from)?;
+            out.push(decode_redo(
+                id,
+                command_id,
+                action,
+                entity_type,
+                entity_id,
+                payload,
+                created,
+            )?);
+        }
+    }
+    Ok(out)
+}
+
+/// 清空重做栈（新的复核命令事务内调用；返回删除条数）。
+///
+/// 语义：撤销后重做可用；任何新命令（改分/接受/排除/撤销后的新操作）一旦提交，
+/// 旧重做路径失效。必须在**与命令写入同一事务**内调用，避免并发下重做过期历史。
+///
+/// # Errors
+///
+/// 删除失败时返回错误。
+pub fn clear_redo(tx: &Transaction<'_>) -> Result<usize> {
+    tx.execute("DELETE FROM review_redo", [])
+        .map_err(PlatformError::from)
 }
 
 /// 写入导出记录（导出成功后调用；事务由调用方保证）。

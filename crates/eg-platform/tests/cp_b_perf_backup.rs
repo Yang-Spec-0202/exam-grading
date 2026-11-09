@@ -107,7 +107,11 @@ fn perf_startup_and_migration() {
     platform.close().unwrap();
     eprintln!("[metric] 平台热启动耗时：{:.1} ms", ms(warm_start));
 
-    assert_eq!(tables, 29, "schema 表数应为 29（v3）");
+    assert_eq!(
+        tables,
+        eg_platform::schema::TABLES.len(),
+        "表数应与 schema 清单一致"
+    );
     assert!(
         cold_start < Duration::from_secs(10),
         "冷启动异常缓慢：{:.1} ms",

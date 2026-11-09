@@ -1,6 +1,6 @@
 # 研究记录：platform（配置/密钥 · SQLite · 资产库 · 任务队列 · 日志/审计/索引 · 备份/时钟）
 
-> 状态：已完成（T07–T12）；v2 扩展（task-37）见 §11、v3 扩展（task-42）见 §12 · 2026-11-03 · 对应规范：`SPEC-platform.md` v0.2.1（§2/§4/§5/§6/§7）、`CONFIG.md` v0.2.3、`SPEC-domain.md` v0.2.2、`CAPABILITY-MAP.md` §2/§3/§5、`AGENTS.md`
+> 状态：已完成（T07–T12）；v2 扩展（task-37）见 §11、v3 扩展（task-42）见 §12、v4 重做栈（task-66）见 §13 · 2026-11-09 · 对应规范：`SPEC-platform.md` v0.2.1（§2/§4/§5/§6/§7）、`CONFIG.md` v0.2.3、`SPEC-domain.md` v0.2.2、`CAPABILITY-MAP.md` §2/§3/§5、`AGENTS.md`
 > 实测环境：Apple M4 / macOS 27.0.1 / rustc 1.99.1 / bundled SQLite 3.54.1
 > 结论用于：`crates/eg-platform/Cargo.toml` 依赖、`src/*` 实现、migrations/0001_initial.sql；上游依赖与许可见 `deps.md`。
 
@@ -593,3 +593,86 @@ v3 为 review（T31–T32）、report（T33–T34）、grade（T30）的真实�
 5) **断点状态文本**：`state` 目前为平台枚举 4 值（pending/running/done/failed）；若 grade 需要更细阶段，需升迁移/枚举（Ask first）。
 6) **删除语义**：V1 只提供撤销栈 `pop` 与提交级排除删除；不提供历史修订删除/物理清理（只追加原则）。
 7) **审计扩展字段过滤**：`AuditQuery` 的 `command_id`/`submission_id` 目前内存过滤（先按 rowid 取 limit 再过滤），数据量大时应改为 SQL 条件（索引已建）。
+
+
+## 13. schema v4：复核重做栈 `review_redo`（2026-11-09，task-66）
+
+> 背景：v3 只有 LIFO `review_undo`；app 侧 redo 只能内存、重启丢失。
+> 本任务只追加迁移，不改历史 SQL；`SCHEMA_VERSION = 4`，`TABLES` 增至 30 张。
+
+### 13.1 迁移 0004
+
+文件：`crates/eg-platform/migrations/0004_review_redo.sql`（只追加，独立事务；失败整体回滚且版本不推进）。
+
+| 表/索引 | 内容 |
+|---|---|
+| `review_redo` | 与 `review_undo` 对称：`id`(ULID)、`command_id`、`action`、`entity_type`、`entity_id`、`payload`(JSON)、`created_at`(RFC3339) |
+| `idx_review_redo_created` | `(created_at, id)`：LIFO 与稳定分页 |
+| `idx_review_redo_command` | `command_id`：按命令定位/审计关联 |
+
+迁移测试：`crates/eg-platform/tests/v4_review_redo.rs`
+- `migrates_v3_to_v4_preserving_data`：手工建 v3 库 + 旧 `review_undo` 行 → `Database::open` 升 v4，旧行保留、`review_redo` 为空、新 API 可写。
+- `failed_v4_migration_rolls_back_and_keeps_version`：预置同名表使 `CREATE TABLE` 失败 → `schema::apply` 返回带迁移名的错误；`schema_version` 仍 3；旧行与旧表保留；失败建索引不残留。
+- `v4_backup_manifest_includes_redo_table`：备份清单包含 `review_redo`（恢复兼容沿用 `BackupService` 全表逻辑）。
+- `v3_backup_restore` 已改为当前版本动态断言并加入 `review_redo` 表检查。
+
+### 13.2 repo API（`eg_platform::repo`）
+
+| 签名 | 语义 |
+|---|---|
+| `push_redo(tx: &Transaction, entry: &RedoEntry) -> Result<()>` | 重做栈入栈（撤销命令事务内调用）。**不自动清空**。 |
+| `pop_redo(tx: &Transaction) -> Result<Option<RedoEntry>>` | LIFO（`created_at DESC, id DESC`）弹出并删除；空栈返回 `None`。 |
+| `list_redo(conn: &Connection, limit: usize, before: Option<&RedoCursor>) -> Result<Vec<RedoEntry>>` | 最新在前；`limit=0` 默认 50；`RedoCursor{created_at,id}` 严格小于上一页最后一条，同时间按 id 稳定分页、不重/不漏。 |
+| `clear_redo(tx: &Transaction) -> Result<usize>` | 清空重做栈，返回删除条数；**新命令写入时必须与命令同事务调用**。 |
+
+`RedoEntry` 字段与 `UndoEntry` 对称；`payload` 由 review 定义，平台不解释。
+
+### 13.3 语义（必须遵守）
+
+1. **撤销后可重做**：执行撤销（`pop_undo`）时，在同一事务内 `push_redo` 一条「前向操作」负载（即重做要重新应用的操作，不是撤销的反向负载）；应用反向操作与审计同事务。
+2. **重做后撤销**：执行重做（`pop_redo`）时，在同一事务内 `push_undo` 一条反向负载，允许再次撤销。
+3. **新操作使重做失效**：任何新的复核命令（接受/改分/排除/恢复等，非撤销/重做）在写入命令/审计的同一事务内先 `clear_redo(tx)`（顺序：清空 → 写业务/审计 → push_undo）；否则旧重做路径会覆盖新状态。`push_redo` 不自动清空，避免撤销时误清空自身历史。
+4. **重启可读**：表持久化；`Platform::open_with` 自动迁移到 v4；app 启动时 `list_redo(conn, 50, None)` 恢复「可重做」状态与按钮可用性。
+5. **失败回滚**：命令与 redo/undo/审计同一 `Database::write` 事务；任一失败整体回滚，避免「操作已生效但 redo 不匹配」。
+
+### 13.4 app/review 接入说明
+
+**review 命令事务模板**
+
+```
+db.write(|tx| {
+    // 新命令：先清空 redo（撤销/重做命令除外）
+    repo::clear_redo(tx)?;
+    // ... 写业务（append_grade_record_with_reasons / review_action）
+    // ... 审计（command_write / append_in_tx）
+    repo::push_undo(tx, &undo_entry)?;   // 供撤销
+    Ok(())
+})
+```
+
+**撤销**
+
+1. `pop_undo(tx)` 取 `UndoEntry{payload=反向负载}`；
+2. 应用反向操作 + 审计；
+3. `push_redo(tx, &RedoEntry{id:new_ulid, command_id:新命令, action, entity_type, entity_id, payload=前向负载, created_at})`（前向负载 = 重做时要重新应用的操作；由 review 适配层转换，平台只存）。
+
+**重做**
+
+1. `pop_redo(tx)` 取前向负载；2. 应用前向操作 + 审计；3. `push_undo(tx, &UndoEntry{payload=新的反向负载})`，允许再次撤销。
+
+**UI**：重做按钮可用性 = `list_redo(...)` 非空；重启后从表恢复。错误/不可重做时保持栈不变（事务回滚）。
+
+### 13.5 验证（2026-11-09 实测）
+
+| 项 | 结果 |
+|---|---|
+| `cargo test -p eg-platform` | **170 passed / 0 failed**（lib 154 + 集成 16：cp_b_perf 5、cp_b_sigkill 3、cp_b_keychain 2、v3_backup_restore 1、v4_review_redo 5） |
+| `cargo clippy -p eg-platform --all-targets -- -D warnings` | 通过 |
+| `cargo fmt -p eg-platform -- --check` | 通过 |
+
+### 13.6 风险与限制
+
+1. **清空责任在调用方**：平台不在 `push_redo` 内自动清空，避免撤销时清掉刚入栈的重做；新命令必须显式 `clear_redo`（已写入 API 文档与本节模板）。
+2. **payload 语义由 review 定义**：平台不校验「前向/反向」是否正确；review 适配层必须保证 undo/redo 负载成对，并有命令幂等键/审计可追溯。
+3. **并发**：单写连接串行化；`clear_redo` 与命令同事务，避免多窗口竞态导致重做过期。
+4. **无限增长**：redo 只在撤销时增长、pop 删除；若同一撤销链反复 undo/redo，表大小受命令数约束；未设置上限/保留期（与 undo 一致）。

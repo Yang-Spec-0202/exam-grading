@@ -626,7 +626,7 @@ mod tests {
         // 快照可被当前程序重新迁移（恢复后继续升级）。
         let mut snapshot_conn = Connection::open(&snapshot).unwrap();
         let outcome = schema::apply(&mut snapshot_conn).unwrap();
-        assert_eq!(outcome.applied, vec![2, 3]);
+        assert_eq!(outcome.applied, vec![2, 3, 4]);
         schema::integrity_check(&snapshot_conn).unwrap();
     }
 }

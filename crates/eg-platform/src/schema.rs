@@ -15,7 +15,8 @@ use crate::error::{PlatformError, Result};
 /// - v2（task-37）：规则草稿负载列、生效规则按题索引、授权额度用尽、审计扩展字段。
 /// - v3（task-42）：复核队列索引/撤销栈/导出记录/提交级排除/判分幂等与断点/复核原因/
 ///   审计命令字段。
-pub const SCHEMA_VERSION: u32 = 3;
+/// - v4（task-66）：复核命令重做栈 `review_redo`（撤销后可重做；新命令清空）。
+pub const SCHEMA_VERSION: u32 = 4;
 
 /// 版本号在 `app_meta` 中的键。
 pub const SCHEMA_VERSION_KEY: &str = "schema_version";
@@ -48,6 +49,11 @@ pub const MIGRATIONS: &[Migration] = &[
         name: "0003_review_undo_export_progress",
         sql: include_str!("../migrations/0003_review_undo_export_progress.sql"),
     },
+    Migration {
+        version: 4,
+        name: "0004_review_redo",
+        sql: include_str!("../migrations/0004_review_redo.sql"),
+    },
 ];
 
 /// 首批表清单（启动校验、诊断包与测试使用）。
@@ -76,6 +82,7 @@ pub const TABLES: &[&str] = &[
     "task_consent",
     "audit_log",
     "review_undo",
+    "review_redo",
     "export_record",
     "submission_exclusion",
     "grade_idempotency",
@@ -340,8 +347,8 @@ mod tests {
 
         let outcome = apply(&mut conn).unwrap();
         assert_eq!(outcome.from_version, 1);
-        assert_eq!(outcome.to_version, 3);
-        assert_eq!(outcome.applied, vec![2, 3]);
+        assert_eq!(outcome.to_version, 4);
+        assert_eq!(outcome.applied, vec![2, 3, 4]);
         verify_tables(&conn).unwrap();
         integrity_check(&conn).unwrap();
 
@@ -469,8 +476,8 @@ mod tests {
         conn.execute("DROP INDEX idx_rubric_draft_question_created", [])
             .unwrap();
         let outcome = apply(&mut conn).unwrap();
-        assert_eq!(outcome.applied, vec![2, 3]);
-        assert_eq!(read_version(&conn).unwrap(), 3);
+        assert_eq!(outcome.applied, vec![2, 3, 4]);
+        assert_eq!(read_version(&conn).unwrap(), 4);
         integrity_check(&conn).unwrap();
     }
 
@@ -530,8 +537,8 @@ mod tests {
 
         let outcome = apply(&mut conn).unwrap();
         assert_eq!(outcome.from_version, 2);
-        assert_eq!(outcome.to_version, 3);
-        assert_eq!(outcome.applied, vec![3]);
+        assert_eq!(outcome.to_version, 4);
+        assert_eq!(outcome.applied, vec![3, 4]);
         verify_tables(&conn).unwrap();
         integrity_check(&conn).unwrap();
 
@@ -719,8 +726,8 @@ mod tests {
         // 移除冲突后重试可正常升级。
         conn.execute("DROP INDEX idx_audit_command", []).unwrap();
         let outcome = apply(&mut conn).unwrap();
-        assert_eq!(outcome.applied, vec![3]);
-        assert_eq!(read_version(&conn).unwrap(), 3);
+        assert_eq!(outcome.applied, vec![3, 4]);
+        assert_eq!(read_version(&conn).unwrap(), 4);
         integrity_check(&conn).unwrap();
     }
 }
