@@ -58,6 +58,16 @@ ignore = [
     # 若将来支持 Linux 桌面，必须重新评估（等待 Slint 升级到 skrifa 或换装饰后端）。
     # 记录：docs/dev/research/app.md §8.4。
     "RUSTSEC-2026-0192", # ttf-parser 0.25.1 unmaintained：Slint/winit 的 Linux Wayland 装饰链
+    # —— 2026-11-09 公告库更新后的处置（task-63 串行同步①；非依赖变更引入）——
+    # 链路：eg-app → slint 1.18.1 → slint-build(build-dep) / slint-macros(proc-macro)
+    #       / i-slint-renderer-skia(经 i-slint-backend-winit) → spin_on 0.1.1 → pin-utils 0.1.1。
+    # 该 crate 为 **unmaintained（非漏洞、无 CVE）**：上游仓库 2026-10-01 归档、0.1.1 为最终版，
+    # 公告标注 “No safe upgrade is available!”；crates.io 上 slint 最新仍为 1.18.1（2026-11-09 核对），
+    # 无法通过升级 Slint 去掉 spin_on/pin-utils。发行目标为 macOS（SPEC.md §11 环境），
+    # 该链路在 macOS 构建中仅用于 Slint 的构建期/过程宏/渲染后端，不进入业务代码路径。
+    # 与上面 zbus 5.x、ttf-parser 两条同属 unmaintained 忽略先例；Slint 发布不再依赖 spin_on 的
+    # 版本后必须复审并删除本条，不长期无条件保留。记录：docs/dev/research/app.md（Slint 依赖链）。
+    "RUSTSEC-2026-0441", # pin-utils 0.1.1 unmaintained：经 slint→spin_on 传递，上游归档无安全升级
 ]
 
 [licenses]
