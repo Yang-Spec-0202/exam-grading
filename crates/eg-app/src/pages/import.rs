@@ -41,6 +41,19 @@ pub(crate) struct ImportRowVm {
     pub(crate) detail: String,
 }
 
+/// 一个多页归组（1 组 = 1 提交）的展示行。
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub(crate) struct ImportGroupVm {
+    /// 组键前缀（脱敏，无姓名/路径）。
+    pub(crate) key: String,
+    /// 页数。
+    pub(crate) pages: u32,
+    /// 页序（如 `1,2`）。
+    pub(crate) page_order: String,
+    /// 组内警告（缺页/页序回退等，已本地化）。
+    pub(crate) warnings: String,
+}
+
 /// 一次导入的汇总（由 `worker` 从 `eg_capture::ImportReport` 映射）。
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(crate) struct ImportReportVm {
@@ -54,6 +67,10 @@ pub(crate) struct ImportReportVm {
     pub(crate) duplicates: u32,
     /// 逐文件行。
     pub(crate) rows: Vec<ImportRowVm>,
+    /// 多页归组（1 组 = 1 提交；单页组也列出）。
+    pub(crate) groups: Vec<ImportGroupVm>,
+    /// 归组警告（脱敏、教师可见）。
+    pub(crate) warnings: Vec<String>,
     /// 汇总短句（已本地化）。
     pub(crate) summary: String,
 }
@@ -85,6 +102,10 @@ pub(crate) struct ImportVm {
     pub(crate) duplicates: u32,
     /// 文件行。
     pub(crate) rows: Vec<ImportRowVm>,
+    /// 多页归组行。
+    pub(crate) groups: Vec<ImportGroupVm>,
+    /// 归组警告。
+    pub(crate) warnings: Vec<String>,
     /// 结果汇总（空 = 未完成）。
     pub(crate) summary: String,
     /// 动作。
@@ -146,6 +167,8 @@ impl ImportPage {
         self.view.done = 0;
         self.view.total = u32::try_from(paths.len()).unwrap_or(u32::MAX);
         self.view.rows.clear();
+        self.view.groups.clear();
+        self.view.warnings.clear();
         self.view.summary.clear();
         self.view.ok = 0;
         self.view.rejected = 0;
@@ -175,6 +198,8 @@ impl ImportPage {
         self.view.failed = report.failed;
         self.view.duplicates = report.duplicates;
         self.view.rows = report.rows;
+        self.view.groups = report.groups;
+        self.view.warnings = report.warnings;
         self.view.summary = report.summary;
     }
 
@@ -256,6 +281,8 @@ mod tests {
             rejected: 1,
             failed: 1,
             duplicates: 0,
+            groups: Vec::new(),
+            warnings: Vec::new(),
             rows: vec![
                 ImportRowVm {
                     name: "a.jpg".to_owned(),

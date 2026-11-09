@@ -817,23 +817,39 @@ impl AppState {
                 } else {
                     ""
                 };
-                let rows = view
-                    .rows
+                let groups = view
+                    .groups
                     .iter()
-                    .map(|row| format!("[{}] {} {}", row.status.code(), row.name, row.detail))
+                    .map(|group| {
+                        format!(
+                            "组 {}：{} 页（页序 {}）{}",
+                            group.key, group.pages, group.page_order, group.warnings
+                        )
+                    })
                     .collect::<Vec<_>>()
                     .join("\n");
+                let warnings = view.warnings.join("\n");
                 format!(
-                    "{}\n{}\n进度 {}/{}\n成功 {} / 拒收 {} / 失败 {} / 重复 {}\n{}",
+                    "{}\n{}\n进度 {}/{}\n组 {} / 警告 {}\n成功 {} / 拒收 {} / 失败 {} / 重复 {}\n{}\n{}",
                     view.hint,
                     naming,
                     view.done,
                     view.total,
+                    view.groups.len(),
+                    view.warnings.len(),
                     view.ok,
                     view.rejected,
                     view.failed,
                     view.duplicates,
-                    rows
+                    groups,
+                    warnings
+                ) + &format!(
+                    "\n{}",
+                    view.rows
+                        .iter()
+                        .map(|row| format!("[{}] {} {}", row.status.code(), row.name, row.detail))
+                        .collect::<Vec<_>>()
+                        .join("\n")
                 )
             }
             PageId::Progress => {

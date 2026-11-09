@@ -400,14 +400,53 @@ impl UndoStore for PlatformUndoStore<'_> {
     }
 }
 
-/// 重判引擎：单题重判需 grade 流水线（OCR/align/推理装配），本轮保持显式失败。
-pub(crate) struct UnavailableRegrade;
+/// 重判引擎：把重判请求落成 platform 任务（grade 流水线 worker 消费；幂等键进任务输入哈希）。
+///
+/// 说明：app 进程内不直接跑整卷判分流水线（需 OCR/align/推理装配与模型授权）；
+/// 重判以**真实任务**登记，失败保留原判（记录不改，只写审计）；任务执行结果由
+/// grade worker 回投新修订。单题/整卷都走同一任务队列，重跑范围写入 payload。
+pub(crate) struct PlatformRegradeEngine<'a> {
+    platform: &'a Platform,
+}
 
-impl RegradeEngine for UnavailableRegrade {
-    fn regrade(&self, _request: &RegradeRequest) -> Result<RegradeResult, ReviewError> {
-        Err(ReviewError::RegradeFailed(
-            "单题重判需要 grade 流水线装配（后续任务接入）".to_owned(),
-        ))
+impl<'a> PlatformRegradeEngine<'a> {
+    pub(crate) const fn new(platform: &'a Platform) -> Self {
+        Self { platform }
+    }
+}
+
+impl RegradeEngine for PlatformRegradeEngine<'_> {
+    fn regrade(&self, request: &RegradeRequest) -> Result<RegradeResult, ReviewError> {
+        let scope = match request.scope {
+            eg_review::RegradeScope::Single => "single",
+            eg_review::RegradeScope::WholeSubmission => "whole_submission",
+        };
+        let payload = serde_json::json!({
+            "kind": "regrade",
+            "grade_id": request.record.id.to_string(),
+            "submission_id": request.record.submission_id.to_string(),
+            "question_id": request.record.question_id.to_string(),
+            "expected_revision": request.record.revision,
+            "scope": scope,
+            "mode": format!("{:?}", request.mode),
+            "corrected_text": request.corrected.as_ref().map(|text| text.text.clone()),
+            "reason": request.reason.map(eg_review::ReviewReasonCode::as_str),
+            "idempotency_key": request.idempotency_key,
+        });
+        let task = self
+            .platform
+            .tasks()
+            .enqueue(
+                eg_platform::NewTask::new(eg_platform::TaskKind::SubmissionGrade, payload)
+                    .with_scope(vec![format!("regrade:{}", request.record.submission_id)])
+                    .with_input_hashes(vec![request.idempotency_key.clone()]),
+            )
+            .map_err(|error| ReviewError::RegradeFailed(error.to_string()))?;
+        Ok(RegradeResult {
+            record: None,
+            task_id: Some(task.task_id.to_string()),
+            fallback_to_queue: false,
+        })
     }
 }
 

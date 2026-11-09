@@ -287,8 +287,11 @@ fn run(
                 Err(error) => services::notify_error(&events, error),
             },
             Command::RunSmokeChain => {
-                let (summary, exported) = services::run_smoke_chain(&platform);
+                let (summary, exported, import_view) = services::run_smoke_chain(&platform);
                 eprintln!("[smoke-chain] {summary}");
+                if let Some(report) = import_view {
+                    events.send(Event::ImportFinished { report });
+                }
                 if let Some(exported) = exported {
                     events.send(Event::ReportExported { summary: exported });
                 }

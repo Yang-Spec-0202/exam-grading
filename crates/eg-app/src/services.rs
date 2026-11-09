@@ -215,6 +215,90 @@ fn import_core(
     Ok((outcome, summary))
 }
 
+/// 把 capture 报告映射为导入页视图模型（组/警告/明细/汇总；UI 与冒烟共用）。
+fn import_vm(
+    report: &eg_capture::ImportReport,
+    persist: &eg_capture::PersistSummary,
+) -> ImportReportVm {
+    let mut rows = Vec::new();
+    for failure in &report.file_failures {
+        rows.push(ImportRowVm {
+            name: format!(
+                "{}…{}",
+                failure
+                    .fingerprint
+                    .path_hash
+                    .chars()
+                    .take(8)
+                    .collect::<String>(),
+                failure.fingerprint.extension
+            ),
+            status: ImportRowStatus::Failed,
+            detail: failure.message.clone(),
+        });
+    }
+    for submission in &report.submissions {
+        rows.push(ImportRowVm {
+            name: submission.submission_id.to_string(),
+            status: if submission.page_count == 0 {
+                ImportRowStatus::Rejected
+            } else {
+                ImportRowStatus::Ok
+            },
+            detail: format!("{} 页", submission.page_count),
+        });
+    }
+    let groups: Vec<crate::pages::import::ImportGroupVm> = report
+        .groups
+        .iter()
+        .map(|group| crate::pages::import::ImportGroupVm {
+            key: group.group_key.to_hex().chars().take(12).collect(),
+            pages: group.page_count,
+            page_order: group
+                .page_order
+                .iter()
+                .map(u32::to_string)
+                .collect::<Vec<_>>()
+                .join(","),
+            warnings: group
+                .warnings
+                .iter()
+                .map(|code| format!("{code:?}"))
+                .collect::<Vec<_>>()
+                .join("/"),
+        })
+        .collect();
+    let warnings: Vec<String> = report
+        .group_warnings
+        .iter()
+        .map(|warning| format!("{:?}：{}", warning.code, warning.detail))
+        .collect();
+    let summary = format!(
+        "成功 {} / 拒收 {} / 失败 {} / 重复 {}；组 {}（多页 {}，警告 {}）；已落库：提交 {} / 页 {} / 资产链接 {} / 审计 {}",
+        report.files_ok,
+        report.pages_rejected,
+        report.files_failed,
+        report.duplicates.len(),
+        groups.len(),
+        groups.iter().filter(|group| group.pages > 1).count(),
+        warnings.len(),
+        persist.submissions,
+        persist.pages,
+        persist.asset_links,
+        persist.audit_entries
+    );
+    ImportReportVm {
+        ok: report.files_ok,
+        rejected: report.pages_rejected,
+        failed: report.files_failed,
+        duplicates: u32::try_from(report.duplicates.len()).unwrap_or(0),
+        rows,
+        groups,
+        warnings,
+        summary,
+    }
+}
+
 /// 执行一次导入并回投进度/报告（路径来自拖拽或文件选择器）。
 pub(crate) fn run_import(platform: &Platform, paths: Vec<PathBuf>, events: &EventBus) {
     let total = u32::try_from(paths.len()).unwrap_or(u32::MAX);
@@ -222,54 +306,10 @@ pub(crate) fn run_import(platform: &Platform, paths: Vec<PathBuf>, events: &Even
     match import_core(platform, &paths) {
         Ok((outcome, persist)) => {
             let report = &outcome.report;
-            let mut rows = Vec::new();
-            for failure in &report.file_failures {
-                rows.push(ImportRowVm {
-                    name: format!(
-                        "{}…{}",
-                        failure
-                            .fingerprint
-                            .path_hash
-                            .chars()
-                            .take(8)
-                            .collect::<String>(),
-                        failure.fingerprint.extension
-                    ),
-                    status: ImportRowStatus::Failed,
-                    detail: failure.message.clone(),
-                });
-            }
-            for submission in &report.submissions {
-                rows.push(ImportRowVm {
-                    name: submission.submission_id.to_string(),
-                    status: if submission.page_count == 0 {
-                        ImportRowStatus::Rejected
-                    } else {
-                        ImportRowStatus::Ok
-                    },
-                    detail: format!("{} 页", submission.page_count),
-                });
-            }
-            let ok = report.files_ok;
-            let rejected = report.pages_rejected;
-            let failed = report.files_failed;
-            let duplicates = u32::try_from(report.duplicates.len()).unwrap_or(0);
-            let summary = format!(
-                "成功 {ok} / 拒收 {rejected} / 失败 {failed} / 重复 {duplicates}；\
-                 已落库：提交 {} / 页 {} / 资产链接 {} / 审计 {}",
-                persist.submissions, persist.pages, persist.asset_links, persist.audit_entries
-            );
+            let total = report.files_total;
+            let vm = import_vm(report, &persist);
             events.send(Event::ImportProgress { done: total, total });
-            events.send(Event::ImportFinished {
-                report: ImportReportVm {
-                    ok,
-                    rejected,
-                    failed,
-                    duplicates,
-                    rows,
-                    summary,
-                },
-            });
+            events.send(Event::ImportFinished { report: vm });
         }
         Err(message) => {
             events.send(Event::ImportFailed { message });
@@ -626,7 +666,7 @@ pub(crate) fn review_detail(
     let repo = crate::platform_adapters::PlatformReviewRepo::new(platform);
     let audit = crate::platform_adapters::PlatformAuditSink::new(platform);
     let undo = crate::platform_adapters::PlatformUndoStore::new(platform, 50);
-    let regrade = crate::platform_adapters::UnavailableRegrade;
+    let regrade = crate::platform_adapters::PlatformRegradeEngine::new(platform);
     let clock = eg_platform::SystemClock;
     let ids = crate::platform_adapters::PlatformIdGen::new(platform);
     let config = ReviewConfig::default();
@@ -707,7 +747,7 @@ pub(crate) fn review_execute(
     let repo = crate::platform_adapters::PlatformReviewRepo::new(platform);
     let audit = crate::platform_adapters::PlatformAuditSink::new(platform);
     let undo = crate::platform_adapters::PlatformUndoStore::new(platform, 50);
-    let regrade = crate::platform_adapters::UnavailableRegrade;
+    let regrade = crate::platform_adapters::PlatformRegradeEngine::new(platform);
     let clock = eg_platform::SystemClock;
     let ids = crate::platform_adapters::PlatformIdGen::new(platform);
     let config = ReviewConfig::default();
@@ -745,6 +785,11 @@ pub(crate) fn review_execute(
             note: None,
         },
         "sampling_pass" => ReviewCommand::SamplingPass { note: None },
+        "regrade_whole" => ReviewCommand::SamplingFail {
+            scope: eg_review::RegradeScope::WholeSubmission,
+            confirmed: true,
+            note: None,
+        },
         "undo" => ReviewCommand::Undo,
         other => {
             return Event::ReviewNotice {
@@ -1398,7 +1443,22 @@ fn fixture_image_paths() -> Vec<PathBuf> {
                 })
             })
             .collect();
-        files.sort();
+        // 确定性顺序：优先「规范文件名」再「-copy/重复副本」，保证同字节去重保留规范页
+        // （否则 `张三_p2.png` 与 `张三_p2-copy.png` 谁先谁后取决于字典序，归组结果会抖动）。
+        files.sort_by(|left, right| {
+            let left_name = left
+                .file_name()
+                .map_or_else(String::new, |name| name.to_string_lossy().into_owned());
+            let right_name = right
+                .file_name()
+                .map_or_else(String::new, |name| name.to_string_lossy().into_owned());
+            let left_copy = u8::from(left_name.contains("copy") || left_name.contains("副本"));
+            let right_copy = u8::from(right_name.contains("copy") || right_name.contains("副本"));
+            left_copy
+                .cmp(&right_copy)
+                .then_with(|| left_name.len().cmp(&right_name.len()))
+                .then_with(|| left_name.cmp(&right_name))
+        });
         if !files.is_empty() {
             return files;
         }
@@ -1500,16 +1560,69 @@ fn append_fixture_grades(
             .map_err(|error| error.to_string())?;
         written += 1;
     }
+    // 额外为第一个提交写一条 fast+sampled 修订：用于「抽检不通过 → 整卷重跑」真实任务断言。
+    if let Some(first) = submissions.first() {
+        let Ok(id) = platform.ids().next_ulid() else {
+            return Ok(written);
+        };
+        let awarded = MilliScore::from_milli(2_000).unwrap_or(MilliScore::ZERO);
+        let record = GradeRecord {
+            id: GradeId::from_ulid(id),
+            submission_id: *first,
+            question_id,
+            revision: 2,
+            mode: GradeMode::Fast,
+            route: RouteDecision::RuleThenModel,
+            route_trace: RouteTrace {
+                rule_id: "R7".to_owned(),
+                inputs_hash: Sha256Hex::of(b"s1-fixture-fast"),
+                classifier_call: None,
+                decided_at: now,
+            },
+            judgement: Judgement::Partial {
+                score: awarded,
+                satisfied: Vec::new(),
+                missing: Vec::new(),
+                reason: "S1 夹具快速模式抽检记录".to_owned(),
+            },
+            awarded,
+            max_score,
+            confidence: Confidence::new(0.62).unwrap_or(Confidence::ZERO),
+            // 抽检项要求 Fast + sampled + AutoAccepted（eg-review 抽样契约）。
+            status: GradeStatus::AutoAccepted,
+            evidence: vec![EvidenceRef::Asset(AssetId::of(b"s1-fixture-fast"))],
+            engines: Vec::new(),
+            created_at: now,
+            reviewed_at: None,
+            review_note: None,
+            sampled: true,
+        };
+        platform
+            .db()
+            .write(move |tx| {
+                eg_platform::repo::append_grade_record_with_reasons(
+                    tx,
+                    &record,
+                    &[eg_domain::ReviewReasonKind::LowConfidence],
+                )
+            })
+            .map_err(|error| error.to_string())?;
+        written += 1;
+    }
     Ok(written)
 }
 
 /// 冒烟链路：夹具落库 → 复核改分 → 导出；返回（汇总文本, 导出摘要）。
-pub(crate) fn run_smoke_chain(platform: &Platform) -> (String, Option<String>) {
+pub(crate) fn run_smoke_chain(
+    platform: &Platform,
+) -> (String, Option<String>, Option<ImportReportVm>) {
     let mut lines = Vec::new();
     match seed_smoke_fixtures(platform) {
         Ok(source) => lines.push(format!("基础夹具：{source}")),
-        Err(error) => return (format!("夹具落库失败：{error}"), None),
+        Err(error) => return (format!("夹具落库失败：{error}"), None, None),
     }
+    let mut import_view: Option<ImportReportVm> = None;
+    let mut regrade_submission: Option<eg_domain::SubmissionId> = None;
     let fixture_paths = fixture_image_paths();
     if fixture_paths.is_empty() {
         lines.push(
@@ -1520,8 +1633,10 @@ pub(crate) fn run_smoke_chain(platform: &Platform) -> (String, Option<String>) {
         match import_core(platform, &fixture_paths) {
             Ok((outcome, summary)) => {
                 let report = &outcome.report;
+                import_view = Some(import_vm(report, &summary));
                 let submission_ids: Vec<eg_domain::SubmissionId> =
                     outcome.submissions.iter().map(|s| s.id).collect();
+                regrade_submission = submission_ids.first().copied();
                 let graded = append_fixture_grades(platform, &submission_ids).unwrap_or(0);
                 lines.push(format!(
                     "真实 import+persist：文件 {}（成功 {} / 失败 {} / 拒收页 {} / 重复 {}，命名提醒 shown={}）\
@@ -1557,6 +1672,29 @@ pub(crate) fn run_smoke_chain(platform: &Platform) -> (String, Option<String>) {
                         .collect::<Vec<_>>()
                         .join("，")
                 ));
+                let multi_page_groups = report
+                    .groups
+                    .iter()
+                    .filter(|group| group.page_count > 1)
+                    .count();
+                let single_page_groups = report.groups.len().saturating_sub(multi_page_groups);
+                lines.push(format!(
+                    "归组：{} 组（多页 {multi_page_groups} / 单页 {single_page_groups}，警告 {}）；\
+                     提交 {} / 页 {}；明细：{}",
+                    report.groups.len(),
+                    report.group_warnings.len(),
+                    report.submissions.len(),
+                    report.pages_total,
+                    report
+                        .groups
+                        .iter()
+                        .map(|group| format!(
+                            "{}页/{}文件/页序{:?}",
+                            group.page_count, group.file_count, group.page_order
+                        ))
+                        .collect::<Vec<_>>()
+                        .join("，")
+                ));
                 let mut assertions = 0;
                 let mut failures = Vec::new();
                 assertions += 1;
@@ -1571,6 +1709,36 @@ pub(crate) fn run_smoke_chain(platform: &Platform) -> (String, Option<String>) {
                 if report.duplicates.is_empty() {
                     failures.push("未命中重复字节（夹具应含重复）".to_owned());
                 }
+                assertions += 1;
+                // 多页归组：9 文件 → 3 个多页组（各 2 页）+ 2 个单页组（EXIF/不规范命名），重复字节不建提交。
+                if report.groups.len() != 5 || multi_page_groups != 3 || single_page_groups != 2 {
+                    failures.push(format!(
+                        "多页归组不符：组 {}（多页 {multi_page_groups} / 单页 {single_page_groups}），期望 5（3+2）",
+                        report.groups.len()
+                    ));
+                }
+                assertions += 1;
+                if report.groups.iter().any(|group| {
+                    group.page_count > 1
+                        && (group.page_order != vec![1_u32, 2] || group.file_count != 2)
+                }) {
+                    failures.push("多页组页序/文件数不符（期望页序 1,2、文件数 2）".to_owned());
+                }
+                assertions += 1;
+                if report.submissions.len() != report.groups.len() {
+                    failures.push(format!(
+                        "提交数与组数不一致：提交 {} / 组 {}",
+                        report.submissions.len(),
+                        report.groups.len()
+                    ));
+                }
+                assertions += 1;
+                if report.pages_total != 8 {
+                    failures.push(format!(
+                        "页数不符：{}（9 文件含 1 重复，期望 8 页）",
+                        report.pages_total
+                    ));
+                }
                 if failures.is_empty() {
                     lines.push(format!("冒烟断言：{assertions}/{assertions} 通过"));
                 } else {
@@ -1582,6 +1750,58 @@ pub(crate) fn run_smoke_chain(platform: &Platform) -> (String, Option<String>) {
     }
     let (ids, rows, counts) = review_queue(platform);
     lines.push(format!("任务/复核队列：{} 条（{counts}）", rows.len()));
+    // 重判：修文本（单题）与抽检不通过（整卷）→ 真实 platform 任务（失败保留原判）。
+    let tasks_before = load_tasks(platform).len();
+    let mut regrade_ok = 0_u32;
+    if let Some(grade_id) = ids.first() {
+        match review_execute(
+            platform,
+            *grade_id,
+            "regrade_text",
+            None,
+            None,
+            Some("修正文本"),
+        ) {
+            Event::ReviewApplied { notice, .. } => {
+                regrade_ok += 1;
+                lines.push(format!("修文本重判：{notice}"));
+            }
+            Event::ReviewNotice { message } => lines.push(format!("修文本重判被拒：{message}")),
+            other => lines.push(format!("修文本重判：{other:?}")),
+        }
+    }
+    if let Some((submission_id, question_id)) =
+        regrade_submission.zip(first_question(platform).map(|(question_id, _)| question_id))
+        && let Some(fast) = platform
+            .db()
+            .read(|conn| {
+                eg_platform::repo::get_latest_grade_record(conn, submission_id, question_id)
+            })
+            .ok()
+            .flatten()
+            .filter(|record| record.mode == GradeMode::Fast && record.sampled)
+    {
+        match review_execute(platform, fast.id, "regrade_whole", None, None, None) {
+            Event::ReviewApplied { notice, .. } => {
+                regrade_ok += 1;
+                lines.push(format!("整卷重跑：{notice}"));
+            }
+            Event::ReviewNotice { message } => lines.push(format!("整卷重跑被拒：{message}")),
+            other => lines.push(format!("整卷重跑：{other:?}")),
+        }
+    }
+    let tasks_after = load_tasks(platform).len();
+    lines.push(format!(
+        "重判任务：新增 {} 条（{} → {}；修文本+整卷各 1 条）",
+        tasks_after.saturating_sub(tasks_before),
+        tasks_before,
+        tasks_after
+    ));
+    lines.push(if regrade_ok == 2 {
+        "重判断言：2/2 通过（命令已登记 platform 任务，原判未改）".to_owned()
+    } else {
+        format!("重判断言失败：{regrade_ok}/2（命令未登记任务）")
+    });
     if let Some(grade_id) = ids.first() {
         let record = platform
             .db()
@@ -1606,5 +1826,5 @@ pub(crate) fn run_smoke_chain(platform: &Platform) -> (String, Option<String>) {
         }
         Err(error) => lines.push(format!("导出失败：{error}")),
     }
-    (lines.join("；"), exported)
+    (lines.join("；"), exported, import_view)
 }

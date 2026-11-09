@@ -359,6 +359,46 @@ EXAM_GRADING_DATA_DIR=<data-dir>/eg-app-s1 ./target/release/eg-app --smoke
 3. 补判分记录为夹具（`append_fixture_grades`，原因 `LowConfidence`），用于驱动复核/导出链路；真实判分流水线未接。
 4. 报表 59 行与 20 题口径的差异来自当前仅有题 1 的判分记录（夹具判分统一挂首题），非统计缺陷，真实判分后复测。
 
+### 8.9 M9 收尾：多页归组接入 / 重判任务化 / redo / structurer（2026-11-09，task-64）
+
+**已真实化/已接入**
+
+| 项 | 实现 | 证据 |
+|---|---|---|
+| 导入多页归组 | app 组合根导入走 `eg_capture` 的 `ImportReport.groups` + `persist`（1 组=1 提交多页）；导入页新增「组/警告」行（组键前缀、页数、页序、组内警告、跨组警告）；冒烟夹具路径排序优先规范文件名（避免 `-copy` 抢在 `p2` 前被批内去重导致归组抖动） | 9 文件 → **5 提交 / 8 页**：3 个「2 页/2 文件/页序 [1,2]」多页组 + 2 个单页（EXIF、不规范命名）；重复 1 去重；命名提醒 shown=true；资产链接 32 / 审计 14 |
+| 重判任务化（真实任务队列） | 新增 `PlatformRegradeEngine` 替换 `UnavailableRegrade`：修文本重判/整卷重跑都落 **platform `SubmissionGrade` 任务**（payload 含 grade/submission/question/scope/mode/corrected/idempotency_key；`with_scope("regrade:<submission>")` + 输入哈希幂等）；ReviewService 返回 `RegradeScheduled` 并审计；**原判分记录不改**（失败/未执行时保留原判） | 冒烟：`regrade_text` 与「抽检不通过→整卷重跑」各登记 1 条任务（任务队列 2→4），重判断言 2/2；抽检记录为 Fast+sampled+AutoAccepted 夹具修订 |
+| 复核命令/导出/图像（沿用） | platform 队列/详情/命令/撤销/导出已真实化（§8.6/§8.7）；报表 stale/图像懒加载保持 | 导出 10 文件 / 57 行；review 队列 5（标准 4 / 抽检 1） |
+
+**冒烟（`--smoke`，数据根 `/tmp/eg-app-m9`，首帧 208.6ms）**
+
+```
+[smoke-chain] 基础夹具：fixtures/paper-20q 试卷（20 题 / 3 学生）；真实 import+persist：文件 9
+（成功 9 / 失败 0 / 拒收页 0 / 重复 1，命名提醒 shown=true）→ 提交 5 / 页 8 / 资产链接 32 / 审计 14；
+补夹具判分 6 条；任务队列：2 条；归组：5 组（多页 3 / 单页 2，警告 0）；提交 5 / 页 8；
+冒烟断言：7/7 通过；任务/复核队列：5 条（标准 4 · 抽检 1 · 合计 5（platform 队列））；
+修文本重判：命令已执行：regrade_text；整卷重跑：命令已执行：regrade_whole；
+重判任务：新增 2 条（2 → 4；修文本+整卷各 1 条）；重判断言：2/2 通过（命令已登记 platform 任务，原判未改）；
+复核改分：命令已执行：override；报表已导出到 .../exports（10 个文件，57 行）
+[smoke] page progress: 待运行 3（导入任务已完成 + 2 条重判任务）
+[smoke] page review: 标准 4 · 抽检 1 · 合计 5
+```
+
+导入明细（页序来自 capture 归组）：`2页/2文件/页序[1,2]`、`1页/1文件/页序[1]`（EXIF）、`2页/2文件/页序[1,2]`、`1页/1文件/页序[1]`（不规范命名）、`2页/2文件/页序[1,2]`。
+
+**门禁（本轮实测）**
+
+- `cargo test -p eg-app`：68 passed / 0 failed；
+- `cargo clippy -p eg-app --all-targets -- -D warnings`：0 errors；
+- `cargo fmt -p eg-app -- --check`：通过；
+- `cargo build -p eg-app --release`：通过；`--smoke` 退出码 0（输出见上）。
+
+**剩余 TODO（如实记录）**
+
+1. **重判流水线执行**：当前 app 侧只做「真实任务登记」（platform 任务队列 + 幂等 + 审计，原判保留）；任务消费（eg-grade pipeline：align→路由→比较/判定→新修订落库）由后续 grade worker 接入，app 不直接跑 OCR/推理。note：eg-review 对单题重判命中 `task_id` 时审计文案写「整卷重跑任务」（上游措辞，暂不修改上游）。
+2. **redo 持久化（保持内存）**：platform v3 只提供 undo 栈的 append/pop（LIFO），没有按动作过滤查询或 redo 表；把 redo 反向条目塞进同一 undo 栈会被后续 `pop_undo` 误当撤销弹出，破坏撤销语义；app 又不能直接引入 DB 驱动（`gates::app_does_not_depend_on_database_driver` 禁止）。因此 redo 仍为进程内暂存（重启丢失），已在 `platform_adapters::PlatformUndoStore` 注明；TODO：platform 增加 redo 表或带动作过滤的弹出 API。
+3. **structurer 真实接入**：规则页「模型整理」仍显式失败（提示「需要本地模型/inference 整理角色」）；手写直译→校验→确认路径可用。接 inference structurer 角色（严格 Schema、最多 1 次修复、只产草稿）为后续任务。
+4. 其余沿用：图像证据懒加载最小版、app 组合根接入后导出的报表联动、UI 键盘/IME 人工验收（M9 仍 🟡 的依据）。
+
 ## 9. 复现命令
 
 ```bash
