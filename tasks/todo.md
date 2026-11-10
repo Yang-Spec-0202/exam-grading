@@ -1,6 +1,6 @@
 # Task List：exam-grading 实现任务
 
-> 版本：v0.2 · 2026-11-05 · 状态：执行中（T01–T41 逐项状态见下方「状态总览」；S1 backend 自动化已 PASS）
+> 版本：v0.2 · 2026-11-05 · 状态：执行中（T01–T41 逐项状态见下方「状态总览」；S1 backend 自动化已 PASS；S3 合成金标 120/120 三项达标——真实标注/试卷仍待办，M10 仍 🟡）
 > 规范基线：`SPEC.md` v0.2.1 + 12 份模块规范 + `CONFIG.md` + `AGENTS.md`
 > 规则：每个任务先写 `docs/dev/research/<module>.md`（研究记录）再写代码；任务完成必须通过该任务的「验证」；每 3–4 个任务一个检查点（见 `tasks/plan.md` §6）。
 > 规模：S=1–2 文件，M=3–5 文件；所有任务均须 ≤5 文件、单次会话可完成。
@@ -52,9 +52,9 @@
 | T38 | 🟡 | 授权/诊断接真实 platform；规则模型整理未接（显式失败），页面为最小可用 |
 | T39 | 🟡 | egctl doctor/replay/bench/acceptance 可用；判分回放与 bench 全项 TODO |
 | T40 | ✅ | Pages 已上线并验证：[首页](https://yang-spec-0202.github.io/exam-grading/) / 研究页 / acceptance 页均 200；workflow `pages.yml`（CI run 41497887203 / Docs run 41497887182） |
-| T41 | 🟡 | S1 外部夹具端到端 PASS（287 断言/9 负向/12 步，~1.8s）；S2/S3/S5/S7 与 UI 人工、真实模型待办 |
+| T41 | 🟡 | S1 外部夹具端到端 PASS（287 断言/9 负向/12 步，~1.8s）；S2/S5/S7 与 UI 人工、真实试卷/标注待办。**S3 附注（2026-11-10）**：合成金标 120/120 上 S3 三项达标（总分精确 94.17%、半分内 100%、ECE 0.0557/校准 0.0607）；真实教师标注/真实试卷仍待办；status 依赖 calibration_id 接入未完成（**M10 仍 🟡，不据此判 M10 通过**） |
 
-> 统计：✅ 34 · 🟡 7 · ⬜ 0（T41 内 S2/S3/S5/S7 与人工项按 ⬜ 计，见 T41 说明与本文件末「待做」；CP-F 已 ✅，见 `tasks/plan.md` §6）。
+> 统计：✅ 34 · 🟡 7 · ⬜ 0（T41 内 S2/S5/S7 与人工项仍待办；S3 在合成金标上已达标但真实标注/试卷未覆盖，见 T41 说明与本文件末「待做」；CP-F 已 ✅，见 `tasks/plan.md` §6）。
 
 ## M0 环境与骨架
 
@@ -387,7 +387,7 @@
 | app 复核真实适配器 | ✅ | platform v3 队列/详情/命令/撤销/排除/导出（app.md §8.6） |
 | `eg-inference` fixture-key 回放 | ✅ | `FixtureCatalog` 精确键/组合键/语义三级匹配 + sha256 完整性校验；`fixtures_wiring` 集成测试 |
 | capture 多页归组（task-52 / tech-spike） | ✅ | 已交付：93 测试，3 学生×2 页 → 3 提交×2 页；外部夹具 S1 端到端已 PASS。app 组合根接入为剩余项（app 真实导入当前仍单文件=单页提交） |
-| 真实模型（OCR/judge）接入验收 | ⬜ | 当前全部为 fixture 后端；S2/S3 需要真实金标与模型 |
+| 真实模型（OCR/judge）接入验收 | 🟡 | judge 已跑通真实 4B 评估：合成金标 120/120 上 S3 三项达标（总分精确 94.17%、半分内 100%、ECE 0.0557/校准 0.0607），partial 召回 91.11%、repair 14/15、0 timeout（并发 2）；OCR 仍为 fixture 后端；真实教师标注/真实试卷待办；status 依赖 calibration_id 接入未完成 |
 | GitHub Pages 线上发布 | ✅ | [yang-spec-0202.github.io/exam-grading](https://yang-spec-0202.github.io/exam-grading/) 首页/研究页/acceptance 页均 200；workflow `pages.yml`（CI run 41497887203 / Docs run 41497887182） |
 
 **多页归组（已交付）**：capture 多页归组已完成（93 测试，3 学生×2 页 → 3 提交×2 页），外部夹具 S1 端到端 PASS，CP-F 已转 ✅。剩余：app 组合根接入该接口后再复跑 `eg-app --smoke`，并更新 `app.md` §8.8 的导入明细。

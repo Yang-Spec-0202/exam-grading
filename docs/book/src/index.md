@@ -1,6 +1,6 @@
 # exam-grading 文档系统
 
-> 状态：随实现更新（2026-11-05）。M0–M8 已完成，M9 部分完成（UI 人工验收待办），M10 进行中：S1 backend 自动化已 PASS（`egctl acceptance`，83 断言/6 负向）；S2/S3/S5/S7、capture 多页归组（task-52）与人工验收待办。最新变更见 [`changelog.md`](changelog.md) `[0.3.0]`。
+> 状态：随实现更新（2026-11-05）。M0–M8 已完成，M9 部分完成（UI 人工验收待办），M10 进行中：S1 backend 自动化已 PASS（`egctl acceptance`，83 断言/6 负向）；S3 合成金标 120/120 三项达标（总分精确 94.17%、半分内 100%、ECE 0.0557/校准 0.0607；真实教师标注/真实试卷仍待办，status 依赖 calibration_id 接入）；S2/S5/S7、capture 多页归组（task-52）与人工验收待办。最新变更见 [`changelog.md`](changelog.md) `[0.3.6]`。
 > 分工：规范（根目录 `SPEC*.md`）写「必须/禁止/验收」，文档写「怎么用/为什么这样设计」；两者不互相复制整段（`SPEC.md` §9）。
 
 ## 1. 阅读顺序
@@ -38,7 +38,7 @@
 | M7 复核与导出 | `review`（T31–T32）、`report`（T33–T34） | 已完成 | `dev/research/review.md`、`dev/research/report.md` |
 | M8 服务层收口 | 端到端判分 → 复核 → 导出与 CP-F 验收 | ✅ 已完成（CP-F 通过：外部夹具 S1 287 断言/0 失败/9 负向/12 步） | `dev/acceptance.md` §S1、`egctl acceptance` |
 | M9 桌面 UI | `app` 外壳（T35）、页面（T36–T38）、真实导入/报表联动 | 🟡 部分完成（外壳/页面/真实导入/导出联动已完成；UI 人工验收未完成：键盘 E2E/IME/真实重判/redo） | `dev/research/app.md`、`user/` |
-| M10 验收与发布 | 用户手册定稿、性能基线、Pages 发布、S1–S14 实测 | 进行中（S1 backend 完成；S2/S3/S5/S7 与 Pages 待办） | `dev/acceptance.md`、`dev/performance.md` |
+| M10 验收与发布 | 用户手册定稿、性能基线、Pages 发布、S1–S14 实测 | 进行中（S1 backend 完成；S2/S5/S7 与 Pages 待办；**S3 附注（2026-11-10）**：合成金标 120/120 上 S3 三项达标（总分精确 94.17%、半分内 100%、ECE 0.0557/校准 0.0607）；真实教师标注/真实试卷仍待办；status 依赖 calibration_id 接入未完成（**M10 仍 🟡，不据此判 M10 通过**）） | `dev/acceptance.md`、`dev/performance.md` |
 
 ## 4. 文档构建与门禁
 

@@ -2,6 +2,78 @@
 
 > 记录规范与行为的变更（按版本倒序）。文档结构变更也在此登记。
 
+## [0.3.6] - 2026-11-10（最终 v2 复测：并发 2 + 超时重试，120/120，S3 达标）
+
+### 新增（瞬态重试 + 最终复测）
+
+- **超时/连接瞬态重试**（`crates/egctl/src/eval_real.rs`）：仅对 timeout/连接重置类错误重试 1 次，
+  退避 500ms，记录 `retries.attempted/succeeded/failed`；schema_violation 不进入瞬态重试（partial 缺列表仍走
+  task-73 的 1 次机械修复）；单测 `transient_error_policy_is_limited_to_timeout_and_transport`。
+- **最终 v2 复测**：`egctl eval --gold fixtures/gold --real-judge --sample 80 --eval-sample 120 --calibrate
+  --prompt v2 --concurrency 2 --json --out target/acceptance/eval-real-judge-v2-final-20261110.json`
+  - **eval 120/120 条成功**（360/360 评分项；无 timeout）；calibration 80 条中 1 条 schema_violation（拟合 237/240 项）。
+  - 瞬态重试 attempted **0**（并发 2 未出现 timeout，策略由单测覆盖）；partial 修复 **15/14/1**（成功率 93.3%）。
+  - 指标：逐项 strict **98.06%**、lenient **99.44%**、总分精确 **94.17%**、半分内 **100.00%**、
+    partial 召回 **91.11%**、mismatch→match **0**、status raw 23.33% / 校准后 76.67%。
+  - 校准：ECE **0.05569→0.06072**（均 ≤0.08）、Brier **0.01655→0.02275（变差）**；单桶校准。
+  - **S3 判定（本次 120/120）**：总分 94.17%≥85% ✅、半分内 100%≥97% ✅、ECE 0.0607≤0.08 ✅ → **达标**；
+    限制：合成 gold、单桶/校准 Brier 变差、status 未接 calibration_id、耗时 **47m44s**（超预算）。
+- **文档**：`docs/dev/acceptance.md` S3 新增「最终 v2 复测（并发2+超时重试，120/120）」节
+  （样本完整性/重试修复/指标/逐项 S3 判定/历史对比/限制/证据）。
+
+## [0.3.5] - 2026-11-10（v2 硬化 + 真实 v2 重校准 + 120 条复测；含接线更正）
+
+### 更正（task-75）
+
+- **先前误标 v2**：`eval_real.rs` 的 `run`/`run_calibrated` 原先硬编码 `PromptVersion::V1`，CLI `--prompt v2`
+  被忽略，而 JSON `split.prompt_version` 按参数写成 v2；因此下面最初记录的「v2 600 次请求 / ECE 0.0833→0.0708 /
+  eval 逐项 86.67%」实际是 **v1 prompt + 80/120 拆分**。已改为统一 `selected_prompt(options)`（run/run_calibrated），
+  新增单测 `prompt_version_selection_and_prompt_content` 断言 V1/V2 选择与提示词内容不同；`split.prompt_version`
+  与实际一致。旧结果 JSON 文件名（`eval-real-judge-v2-calibrated-20261110.json`）保留但内容实为 v1，文档已标注。
+
+### 新增（v2 schema 硬化/重校准/真实重跑）
+
+- **partial schema 硬化 + 1 次机械修复**：v2 prompt 明确 partial 必须带 `satisfied/missing`；首次违规反馈字段后
+  做 1 次重试（严格 `JudgeOutput::validate` 不变），仍失败计入 `schema_violation`；记录 repair attempted/succeeded/failed。
+- **真实 v2 重跑**（qwen3.5-4b Q4_K_M，b11960-8642541b2，并发 4，80/120 互斥拆分）：
+  `target/acceptance/eval-real-judge-v2-true-20261110.json`；耗时 **37m10s**（超 30min 预算）。
+  - **repair attempted 11 / succeeded 11**（partial 缺列表被真实触发并修复成功；另有 1 条修复后仍失败，旧 artifact 的
+    failed 计数未含该条，代码已修正为 failed=1 统计）；失败：**timeout 33 + schema_violation 1**。
+  - 结果覆盖：calibration 拟合 204/240 项；eval **101/120 条成功**（303/360 项），**19/120（15.8%）失败/超时未入分母**。
+  - eval（成功子集）：逐项 strict **98.02%**、lenient 100%、总分精确 **94.06%**、半分内 **100%**、
+    partial 召回 **88.57%**、mismatch→match **0**、status raw 25.74% / 校准后 74.26%。
+  - 校准：ECE **0.05957→0.05863**（≤0.08）、Brier **0.01623→0.02285（变差）**；校准表 1 桶（0.9216）。
+  - 结论：成功子集看似达标，但 15.8% 失败导致选择偏差，且 Brier 变差/status 未接入，**不宣称 S3 达标**；
+    需降并发/加重试后无失败复测。
+- **v1 + 80/120 参考（原误标 v2 的那组，2026-11-10）**：600 次请求、0 失败、21m29s、token total 222,884；
+  eval 120 条逐项 86.67%、总分 65.83%、半分内 95.00%、partial 召回 42.22%、ECE 0.0833→0.0708；
+  仅作 v1 基线参考，文件名与旧文档已注明修正。
+- **文档**：`docs/dev/acceptance.md` S3 将原节改标「v1 prompt + 80/120」并新增「真实 v2 prompt + 重校准」
+  一节（样本/repair/失败/指标/是否达标/限制/证据）。
+
+## [0.3.4] - 2026-11-10（judge 校准 + 提示词 v2 A/B：S3 ECE 0.1056→0.0667）
+
+### 新增（校准与 A/B）
+
+- **`egctl eval --real-judge --calibrate [--ab]`**（`crates/egctl/src/eval_real.rs`）：固定 seed=20261109 按
+  perturbation×status 分层拆分 calibration/eval/A-B（互斥无泄漏；默认 60/60/30），校准集拟合
+  **等频分桶 + PAV 单调**校准表（无新依赖），仅 eval 集评估；输出校准前后 ECE/Brier、可靠性表、
+  calibration_id `qwen35-4b-q4-iso-v1`、逐项 strict/lenient、partial 召回、mismatch→match、混淆矩阵、失败分类；
+  提示词 v2 明确「关键要素等价即 match；部分满足→partial + satisfied/missing；仅关键结果错误 mismatch」。
+  校准数学有单元测试（单调性/PAV/ECE 改善）；真实模型测试 `#[ignore]`。
+- **实测（qwen3.5-4b-instruct Q4_K_M，llama.cpp b11960-8642541b2，并发 3，2026-11-10）**：
+  calibration 60 / eval 60 / A/B 30，180 条 entry、540 次请求；总耗时 **30m42s**（超 20 min 预算，如实记录）。
+  - 校准（eval 60 条/180 评分项）：ECE **0.1056→0.0667**（达标 ≤0.08）、Brier **0.1425→0.1358**；
+    eval 逐项 strict 84.4%、总分精确 63.3%、半分内 90.0%、partial 召回 34.8%、status 23.3%（校准后 status 不变，
+    因校准概率 0.778<0.80 且 calibration_id 未接入 grade）；校准表 1 桶（confidence=0.95 并列，accuracy=0.778）。
+  - A/B（30 条，配对成功 25 条）：v1 逐项 90.7%/partial 召回 37.5%/总分精确 72.0%/ECE 0.0433；
+    v2 **逐项 100%**/partial 召回 **100%**/总分精确 **100%**/mismatch→match **0**/ECE 0.0500；
+    v2 失败 5/30（3 schema_violation: partial 缺 satisfied/missing；2 timeout），配对子集存在选择偏差，不宣称整体 100%。
+  - 结论：ECE 达标但 S3 准确率仍不达标（总分精确 63.3%<85%、半分内 90%<97%）；v2 方向有效但需全量复测；
+    **未调参、未改 gold/实现**。
+- **文档**：`docs/dev/acceptance.md` S3 新增「校准与提示词改进（本轮）」段（拆分/方法/ID/前后 ECE/Brier/
+  可靠性表/A-B/失败/耗时/限制）；结果 JSON `target/acceptance/eval-real-judge-calibrated-20261110.json`。
+
 ## [0.3.3] - 2026-11-10（真实 4B judge S3 复测：`egctl eval --real-judge`）
 
 ### 新增（评估）
