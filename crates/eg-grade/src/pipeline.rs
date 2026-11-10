@@ -585,8 +585,12 @@ impl Grader<'_> {
                     match judge_result {
                         Ok(validated) => {
                             used_model = true;
-                            calibrated = validated.outcome.is_calibrated();
-                            evidence_confidence = validated.evidence_confidence;
+                            calibrated = validated.outcome.is_calibration_applied();
+                            // 门禁/记录优先使用可信校准后的置信度；raw 保留在 ModelCall.output。
+                            evidence_confidence = validated
+                                .outcome
+                                .calibrated_confidence
+                                .or(validated.evidence_confidence);
                             conflicts.extend(validated.conflicts.clone());
                             if !engines.contains(&validated.engine) {
                                 engines.push(validated.engine.clone());

@@ -242,6 +242,8 @@ pub fn judge_response(
         reason: reason.to_owned(),
         confidence: confidence(0.95),
         calibration_id: calibrated.then(calibration),
+        calibrated_confidence: calibrated.then(|| confidence(0.9)),
+        calibration_verified: calibrated,
         evidence_confidence: Some(confidence(0.95)),
         engine: judge_engine(),
         latency_ms: 120,

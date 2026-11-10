@@ -1068,6 +1068,9 @@ fn rule_fallback(request: &JudgeRequest<'_>) -> Option<JudgeResponse> {
         reason: format!("规则回退（judge 夹具覆盖缺口）：{:?}", run.evaluation),
         confidence: Confidence::new(0.95).unwrap_or(Confidence::ONE),
         calibration_id: CalibrationId::new("fixture-rule-fallback").ok(),
+        // 验收夹具的校准 id 视为可信测试桩（生产 inference 会清除未验证 id）。
+        calibrated_confidence: Some(Confidence::new(0.95).unwrap_or(Confidence::ONE)),
+        calibration_verified: true,
         evidence_confidence: Some(Confidence::new(0.95).unwrap_or(Confidence::ONE)),
         engine: EngineStamp {
             role: ModelRole::Judge,
@@ -1113,6 +1116,8 @@ fn map_judge_output(output: &JudgeOutput, raw: &Value) -> JudgeResponse {
             .calibration_id
             .as_ref()
             .and_then(|id| CalibrationId::new(id.as_str()).ok()),
+        calibrated_confidence: output.calibration_id.as_ref().map(|_| output.confidence),
+        calibration_verified: output.calibration_id.is_some(),
         evidence_confidence: Some(output.confidence),
         engine: EngineStamp {
             role: ModelRole::Judge,

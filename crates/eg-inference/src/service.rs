@@ -13,12 +13,14 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use eg_domain::{
-    BackendId, Clock, EngineStamp, MilliScore, ModelCall, ModelRole, Sha256Hex, TaskId,
+    BackendId, CalibrationId, Clock, EngineStamp, MilliScore, ModelCall, ModelRole, Sha256Hex,
+    TaskId,
 };
 use serde_json::Value;
 
 use crate::breaker::CircuitBreaker;
 use crate::budget::{BudgetLedger, PricingTier, cost_micros};
+use crate::calibration::CalibrationTable;
 use crate::call::{CallContext, CallRecorder};
 use crate::consent::{ConsentCheck, ConsentGate, TaskConsent, require_cloud_enabled};
 use crate::error::InferenceError;
@@ -232,6 +234,8 @@ fn judge_to_json(output: &JudgeOutput) -> Value {
         "confidence": output.confidence.get(),
         "matched_alternative": output.matched_alternative,
         "calibration_id": output.calibration_id.as_ref().map(ToString::to_string),
+        "calibrated_confidence": output.calibrated_confidence.map(eg_domain::Confidence::get),
+        "calibration_verified": output.calibration_verified,
         "satisfied": output.satisfied,
         "missing": output.missing,
     })
@@ -534,7 +538,7 @@ impl InferenceService {
 
         // ⑦ 严格 Schema 校验
         let parsed = Self::parse(&attempt.raw_content, &request.expected);
-        let (output, validated) = match parsed {
+        let (_, mut validated) = match parsed {
             Ok(parsed) => parsed,
             Err(error) => {
                 // 已产生的云端费用照实记账（输出不合法也要记账）。
@@ -543,6 +547,11 @@ impl InferenceService {
                 return self.fail(&request, entry, &engine, input_hash, &error);
             }
         };
+
+        // ⑦b 可信校准表（可选）：仅当模型身份/版本/量化全部匹配时套用；
+        // 缺失/不匹配/解析失败 → 保持 uncalibrated，绝不静默使用错表。
+        Self::apply_calibration(entry, &mut validated);
+        let output = validated.raw();
 
         // ⑧ 记账：本地恒 0；云端按定价表。
         self.budget.charge(request.task_id, attempt.cost_micros);
@@ -612,6 +621,31 @@ impl InferenceService {
                 })
             }
         }
+    }
+
+    fn apply_calibration(entry: &ModelEntry, validated: &mut ValidatedOutput) {
+        let ValidatedOutput::Judge(output) = validated else {
+            return;
+        };
+        // 先清除模型自报的 id/校准值：只有本机可信表验证通过才置位。
+        output.calibration_id = None;
+        output.calibrated_confidence = None;
+        output.calibration_verified = false;
+        let Some(path) = entry.calibration_table.as_deref() else {
+            return;
+        };
+        let Ok(table) = CalibrationTable::load(std::path::Path::new(path)) else {
+            return;
+        };
+        if !table.matches(&entry.id, &entry.version, &entry.quantization) {
+            return;
+        }
+        let Ok(id) = CalibrationId::new(table.id.clone()) else {
+            return;
+        };
+        output.calibration_id = Some(id);
+        output.calibrated_confidence = table.calibrate(output.confidence);
+        output.calibration_verified = true;
     }
 
     fn parse(

@@ -284,6 +284,8 @@ pub fn validate_judge_response(
         confidence: response.confidence,
         matched_alternative: response.matched_alternative,
         calibration_id: response.calibration_id.clone(),
+        calibrated_confidence: response.calibrated_confidence,
+        calibration_verified: response.calibration_verified,
     };
     let _: Option<CalibrationId> = response.calibration_id;
     Ok(ValidatedJudge {

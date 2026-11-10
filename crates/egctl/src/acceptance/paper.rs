@@ -471,6 +471,8 @@ fn judge_response(
         } else {
             None
         },
+        calibrated_confidence: calibrated.then(|| confidence(0.9)),
+        calibration_verified: calibrated,
         evidence_confidence: Some(confidence(0.95)),
         engine: engine(),
         latency_ms: 120,

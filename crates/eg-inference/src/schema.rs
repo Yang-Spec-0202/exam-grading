@@ -78,6 +78,10 @@ pub struct JudgeOutput {
     pub matched_alternative: Option<u32>,
     /// 校准 id（为空时调用方不得自动放行）。
     pub calibration_id: Option<CalibrationId>,
+    /// 校准后置信度（推断层按可信表填充；原始 confidence 保留）。
+    pub calibrated_confidence: Option<Confidence>,
+    /// 是否已由可信校准表验证（防止模型伪报 id）。
+    pub calibration_verified: bool,
     /// 满足项（评分项/选项标识，`partial` 时可能有）。
     pub satisfied: Vec<String>,
     /// 缺失项（评分项/选项标识，`partial` 时可能有）。
@@ -184,6 +188,8 @@ impl JudgeOutput {
             confidence,
             matched_alternative,
             calibration_id,
+            calibrated_confidence: None,
+            calibration_verified: false,
             satisfied,
             missing,
         })
@@ -233,6 +239,8 @@ impl JudgeOutput {
             confidence: self.confidence,
             matched_alternative: self.matched_alternative,
             calibration_id: self.calibration_id.clone(),
+            calibrated_confidence: self.calibrated_confidence,
+            calibration_verified: self.calibration_verified,
         })
     }
 }

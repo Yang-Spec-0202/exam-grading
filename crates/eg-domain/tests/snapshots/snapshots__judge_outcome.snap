@@ -1,6 +1,7 @@
 ---
 source: crates/eg-domain/tests/snapshots.rs
-expression: "JudgeOutcome\n{\n    judgement: judgement(), confidence: conf(0.8), matched_alternative:\n    Some(0), calibration_id: Some(CalibrationId::new(\"cal-2026\").unwrap()),\n}"
+assertion_line: 790
+expression: "JudgeOutcome\n{\n    judgement: judgement(), confidence: conf(0.8), matched_alternative:\n    Some(0), calibration_id: Some(CalibrationId::new(\"cal-2026\").unwrap()),\n    calibrated_confidence: Some(conf(0.75)), calibration_verified: true,\n}"
 ---
 {
   "judgement": {
@@ -25,5 +26,7 @@ expression: "JudgeOutcome\n{\n    judgement: judgement(), confidence: conf(0.8),
   },
   "confidence": 0.8,
   "matched_alternative": 0,
-  "calibration_id": "cal-2026"
+  "calibration_id": "cal-2026",
+  "calibrated_confidence": 0.75,
+  "calibration_verified": true
 }

@@ -49,6 +49,8 @@ pub struct Options {
     pub eval_sample: Option<usize>,
     /// 校准/正式评估使用的提示词版本（A/B 始终同时跑 v1/v2）。
     pub prompt: PromptVersion,
+    /// 拟合后把校准表写到 `config/calibration/<id>.json`（默认不写）。
+    pub write_calibration: bool,
 }
 
 impl Default for Options {
@@ -65,6 +67,7 @@ impl Default for Options {
             ab_sample: Some(30),
             eval_sample: None,
             prompt: PromptVersion::V1,
+            write_calibration: false,
         }
     }
 }
@@ -1658,7 +1661,54 @@ pub fn run_calibrated(options: &Options) -> Result<CalibratedReport, String> {
     };
     let mut report = report;
     report.duration_ms = started.elapsed().as_millis();
+    if options.write_calibration {
+        write_calibration_file(&report, options)?;
+    }
     Ok(report)
+}
+
+/// 将本次拟合的校准表写到 `config/calibration/<calibration_id>.json`（不含学生数据）。
+fn write_calibration_file(report: &CalibratedReport, options: &Options) -> Result<(), String> {
+    let points = report.calibration["table"]
+        .as_array()
+        .ok_or_else(|| "报告缺少校准表".to_owned())?
+        .iter()
+        .map(|bin| {
+            json!({
+                "lower": bin["lower"],
+                "upper": bin["upper"],
+                "calibrated": bin["accuracy"],
+            })
+        })
+        .collect::<Vec<_>>();
+    let created_at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+    let file = json!({
+        "schema_version": 1,
+        "id": CALIBRATION_ID,
+        "model_id": options.model,
+        "model_version": "3.5",
+        "quantization": "q4_k_m",
+        "method": "equal-frequency bins (10) + PAV monotone pooling",
+        "table": points,
+        "fit": {
+            "n": report.eval["item_pairs"],
+            "seed": SEED,
+            "prompt_version": report.split["prompt_version"],
+            "calibration_entries": report.split["calibration"],
+            "eval_entries": report.split["eval"],
+        },
+        "created_at": created_at,
+        "gold_sha256": report.gold_hash,
+    });
+    let text = serde_json::to_string_pretty(&file)
+        .map_err(|error| format!("序列化校准表失败：{error}"))?;
+    let dir = std::path::Path::new("config/calibration");
+    std::fs::create_dir_all(dir)
+        .map_err(|error| format!("创建 {} 失败：{error}", dir.display()))?;
+    let path = dir.join(format!("{CALIBRATION_ID}.json"));
+    std::fs::write(&path, text).map_err(|error| format!("写 {} 失败：{error}", path.display()))?;
+    eprintln!("校准表已写入 {}", path.display());
+    Ok(())
 }
 
 fn item_pairs(entries: &[EntryResult]) -> Vec<(f64, bool)> {

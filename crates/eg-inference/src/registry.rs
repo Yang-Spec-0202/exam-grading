@@ -178,6 +178,8 @@ pub struct ModelEntry {
     pub local: Option<LocalEndpoint>,
     /// 云端端点。
     pub cloud: Option<CloudEndpoint>,
+    /// 可选校准表路径（JSON；相对工作目录）；缺失/不匹配时保持 uncalibrated。
+    pub calibration_table: Option<String>,
 }
 
 impl ModelEntry {
@@ -619,6 +621,8 @@ struct RawEntry {
     weights: Vec<RawWeight>,
     local: Option<RawLocal>,
     cloud: Option<RawCloud>,
+    #[serde(default)]
+    calibration_table: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -820,6 +824,7 @@ impl RawEntry {
             weights,
             local,
             cloud,
+            calibration_table: self.calibration_table,
         })
     }
 

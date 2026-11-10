@@ -243,6 +243,12 @@ pub struct JudgeOutcome {
     pub matched_alternative: Option<u32>,
     /// 校准记录 id；为空禁止自动放行。
     pub calibration_id: Option<CalibrationId>,
+    /// 校准后置信度（表匹配时由 inference 填充；`None` = 未套用校准）。
+    #[serde(default)]
+    pub calibrated_confidence: Option<Confidence>,
+    /// 是否已由可信校准表验证（推断层设置；伪造 id 不置位）。
+    #[serde(default)]
+    pub calibration_verified: bool,
 }
 
 impl JudgeOutcome {
@@ -256,6 +262,12 @@ impl JudgeOutcome {
     #[must_use]
     pub fn permits_auto_accept(&self) -> bool {
         self.is_calibrated() && !matches!(self.judgement, Judgement::Ungradable { .. })
+    }
+
+    /// 是否已套用可信校准（id + 校准置信度 + 验证标志三者齐全）。
+    #[must_use]
+    pub fn is_calibration_applied(&self) -> bool {
+        self.is_calibrated() && self.calibration_verified && self.calibrated_confidence.is_some()
     }
 
     /// 校验判定与满分一致性。
@@ -790,11 +802,15 @@ mod tests {
             confidence: Confidence::new(0.8).unwrap(),
             matched_alternative: Some(0),
             calibration_id: None,
+            calibrated_confidence: None,
+            calibration_verified: false,
         };
         assert!(!outcome.is_calibrated());
         assert!(!outcome.permits_auto_accept());
         let calibrated = JudgeOutcome {
             calibration_id: Some(crate::values::CalibrationId::new("cal-1").unwrap()),
+            calibrated_confidence: Some(Confidence::new(0.8).unwrap()),
+            calibration_verified: true,
             ..outcome
         };
         assert!(calibrated.is_calibrated());

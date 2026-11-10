@@ -129,6 +129,7 @@ license = "Apache-2.0"
 max_concurrency = 1
 timeout_secs = 20
 prompt_schema_version = "judge.outcome.v1"
+calibration_table = "config/calibration/qwen35-4b-q4-iso-v1.json"
 description = "默认判定（CONFIG.md grade.model_profile）：4B 指令模型 + 受限 JSON；Qwen3 系列必须关闭 thinking，否则 content 为空"
 
 [models.local]

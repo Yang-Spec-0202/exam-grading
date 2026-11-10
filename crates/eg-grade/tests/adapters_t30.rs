@@ -203,7 +203,10 @@ fn inference_judge_adapter_maps_fixture_output_and_records_model_call() {
     let response = judge.judge(&request).expect("夹具判定应成功");
     assert_eq!(response.verdict, JudgeVerdict::Match);
     assert_eq!(response.awarded.map(MilliScore::as_milli), Some(5000));
-    assert!(response.calibration_id.is_some());
+    // 无可信校准表：模型自报 id 必须清除（uncalibrated），不得静默信任。
+    assert!(response.calibration_id.is_none());
+    assert!(!response.calibration_verified);
+    assert!(response.calibrated_confidence.is_none());
     let call = response.model_call.expect("真实推理应返回已落库调用");
     assert_eq!(call.engine.backend, eg_domain::BackendId::fixture());
     assert_eq!(harness.store.len(), 1, "推理服务已落库 ModelCall");

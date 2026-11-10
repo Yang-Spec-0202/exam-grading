@@ -159,6 +159,10 @@ pub struct JudgeResponse {
     pub confidence: Confidence,
     /// 校准记录 id（为空禁止自动放行）。
     pub calibration_id: Option<CalibrationId>,
+    /// 校准后置信度（由 inference 可信校准表填充；`None` = 未套用）。
+    pub calibrated_confidence: Option<Confidence>,
+    /// 是否已由可信校准表验证（伪造 id 不置位）。
+    pub calibration_verified: bool,
     /// 证据块最低置信度（无证据块时为空 → 置信度上限 0.5）。
     pub evidence_confidence: Option<Confidence>,
     /// 引擎指纹。

@@ -794,6 +794,8 @@ fn snapshot_grade_module() {
             confidence: conf(0.8),
             matched_alternative: Some(0),
             calibration_id: Some(CalibrationId::new("cal-2026").unwrap()),
+            calibrated_confidence: Some(conf(0.75)),
+            calibration_verified: true,
         }
     );
     snap!("grade_mode", [GradeMode::Standard, GradeMode::Fast]);
