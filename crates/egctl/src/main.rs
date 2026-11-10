@@ -73,6 +73,7 @@ struct Args {
     eval_sample: Option<usize>,
     prompt: String,
     write_calibration: bool,
+    apply_calibration: Option<PathBuf>,
     command: Command,
 }
 
@@ -364,6 +365,7 @@ fn run_eval(args: &Args) -> Result<u8, String> {
                 eval_real::PromptVersion::V1
             },
             write_calibration: args.write_calibration,
+            apply_calibration: args.apply_calibration.clone(),
         };
         if args.calibrate {
             let report = eval_real::run_calibrated(&options)?;
@@ -440,6 +442,7 @@ fn parse_args() -> Result<Args, String> {
     let mut eval_sample = None;
     let mut prompt = "v1".to_owned();
     let mut write_calibration = false;
+    let mut apply_calibration = None;
     let mut tokens: Vec<String> = Vec::new();
 
     let mut args = std::env::args().skip(1);
@@ -487,6 +490,12 @@ fn parse_args() -> Result<Args, String> {
                 );
             }
             "--write-calibration" => write_calibration = true,
+            "--apply-calibration" => {
+                let value = args
+                    .next()
+                    .ok_or_else(|| "--apply-calibration 需要一个 JSON 路径".to_owned())?;
+                apply_calibration = Some(PathBuf::from(value));
+            }
             "--prompt" => {
                 prompt = args
                     .next()
@@ -629,6 +638,7 @@ fn parse_args() -> Result<Args, String> {
         eval_sample,
         prompt,
         write_calibration,
+        apply_calibration,
         command,
     })
 }
@@ -673,6 +683,7 @@ fn print_help() {
            --eval-sample <N>      eval 样本条数（v2 重校准用 120；默认=--sample）\n\
            --prompt <v1|v2>       calibration/eval 使用的提示词（默认 v1；A/B 始终双跑）\n\
            --write-calibration    校准后写 config/calibration/<id>.json（默认不写）\n\
+           --apply-calibration <P> eval 用 production 校准表做门禁模拟（严格 identity）\n\
          \n\
          退出码：0 = OK，2 = WARN（有降级/未就绪项），1 = ERROR",
         env!("CARGO_PKG_VERSION")

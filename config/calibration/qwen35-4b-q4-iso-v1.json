@@ -17,8 +17,7 @@
     "seed": "20261109",
     "prompt_version": "v2",
     "calibration_entries": 80,
-    "eval_entries": 120,
-    "source_artifact": "target/acceptance/eval-real-judge-v2-final-20261110.json"
+    "eval_entries": 120
   },
   "created_at": "2026-11-10T15:45:04Z",
   "gold_sha256": "b2c7ce3444284f431ec8ad643c2fd0793c0208938e4a3492f08c7afcc0aee97f"

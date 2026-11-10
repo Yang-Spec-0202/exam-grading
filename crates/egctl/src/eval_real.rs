@@ -51,6 +51,8 @@ pub struct Options {
     pub prompt: PromptVersion,
     /// 拟合后把校准表写到 `config/calibration/<id>.json`（默认不写）。
     pub write_calibration: bool,
+    /// production 校准表路径（`--apply-calibration`）；严格 identity 匹配后用于门禁模拟。
+    pub apply_calibration: Option<PathBuf>,
 }
 
 impl Default for Options {
@@ -68,6 +70,7 @@ impl Default for Options {
             eval_sample: None,
             prompt: PromptVersion::V1,
             write_calibration: false,
+            apply_calibration: None,
         }
     }
 }
@@ -1268,6 +1271,8 @@ pub struct CalibratedReport {
     pub repairs: Value,
     /// 瞬态超时/连接重试统计。
     pub retries: Value,
+    /// production 校准表门禁模拟（raw vs calibrated status）。
+    pub calibration_status: Value,
     /// 耗时/token。
     pub duration_ms: u128,
     /// token 用量。
@@ -1297,6 +1302,7 @@ impl CalibratedReport {
             "failures": self.failures,
             "repairs": self.repairs,
             "retries": self.retries,
+            "calibration_status": self.calibration_status,
             "duration_ms": self.duration_ms,
             "tokens": self.tokens,
             "warnings": self.warnings,
@@ -1507,6 +1513,7 @@ pub fn run_calibrated(options: &Options) -> Result<CalibratedReport, String> {
             "success_rate": if attempted == 0 { 1.0 } else { succeeded as f64 / attempted as f64 },
         })
     };
+    let calibration_status = production_calibration_status(&eval_entries, options);
     let retries = {
         let attempted: u64 = calibration_entries
             .iter()
@@ -1536,8 +1543,18 @@ pub fn run_calibrated(options: &Options) -> Result<CalibratedReport, String> {
     }
     let mut warnings = vec![
         "gold expected 为合成规则标签，非真实教师标注；校准/eval 拆分固定 seed 但样本小，指标仅作基线".to_owned(),
-        "模型未提供 calibration_id：校准表 ID 仅写入 eval 输出/报告；JudgeOutcome/grade 结构接入需规范扩展".to_owned(),
     ];
+    if calibration_status["applied"].as_bool().unwrap_or(false) {
+        warnings.push(
+            "production 校准表已按严格 identity 套用；raw status 为未校准模拟，calibrated status 为生产门禁模拟（不改变逐项/总分指标）"
+                .to_owned(),
+        );
+    } else {
+        warnings.push(
+            "未套用 production 校准表（--apply-calibration 未指定或 identity 不匹配）：status 仍为 uncalibrated 模拟"
+                .to_owned(),
+        );
+    }
     if eval_calibrated["ece"].as_f64().unwrap_or(0.0) >= eval_raw["ece"].as_f64().unwrap_or(0.0) {
         warnings.push(
             "校准未降低 eval ECE（可能为样本小/校准集与 eval 分布偏移），如实保留未调参结果"
@@ -1653,6 +1670,7 @@ pub fn run_calibrated(options: &Options) -> Result<CalibratedReport, String> {
         failures,
         repairs,
         retries,
+        calibration_status,
         duration_ms: 0,
         tokens,
         warnings,
@@ -1665,6 +1683,17 @@ pub fn run_calibrated(options: &Options) -> Result<CalibratedReport, String> {
         write_calibration_file(&report, options)?;
     }
     Ok(report)
+}
+
+fn registry_identity(model: &str) -> Result<(String, String), String> {
+    let registry = eg_inference::registry::ModelRegistry::parse_str(
+        eg_inference::registry::DEFAULT_REGISTRY_TOML,
+    )
+    .map_err(|error| format!("注册表解析失败：{error}"))?;
+    let entry = registry
+        .require(model)
+        .map_err(|error| format!("模型 {model} 不在注册表：{error}"))?;
+    Ok((entry.version.clone(), entry.quantization.clone()))
 }
 
 /// 将本次拟合的校准表写到 `config/calibration/<calibration_id>.json`（不含学生数据）。
@@ -1682,12 +1711,13 @@ fn write_calibration_file(report: &CalibratedReport, options: &Options) -> Resul
         })
         .collect::<Vec<_>>();
     let created_at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+    let (model_version, quantization) = registry_identity(&options.model)?;
     let file = json!({
         "schema_version": 1,
         "id": CALIBRATION_ID,
         "model_id": options.model,
-        "model_version": "3.5",
-        "quantization": "q4_k_m",
+        "model_version": model_version,
+        "quantization": quantization,
         "method": "equal-frequency bins (10) + PAV monotone pooling",
         "table": points,
         "fit": {
@@ -1870,6 +1900,122 @@ fn token_totals(calibration: &[EntryResult], eval: &[EntryResult]) -> Value {
         calls += u64::try_from(entry.call_latencies.len()).unwrap_or(0);
     }
     json!({"prompt_total": prompt, "completion_total": completion, "total": prompt + completion, "calls": calls})
+}
+
+fn production_status(calibrated_confidence: f64) -> &'static str {
+    if calibrated_confidence >= 0.85 {
+        "auto_accept"
+    } else {
+        "needs_review"
+    }
+}
+
+/// eval 门禁模拟：用 production 校准表按 `is_calibration_applied + ModelDirect 标准阈值(0.85)` 判定。
+fn production_calibration_status(entries: &[EntryResult], options: &Options) -> Value {
+    let Some(path) = options.apply_calibration.as_deref() else {
+        return json!({"applied": false, "reason": "未指定 --apply-calibration"});
+    };
+    let identity = (|| -> Result<(String, String), String> {
+        let registry = eg_inference::registry::ModelRegistry::parse_str(
+            eg_inference::registry::DEFAULT_REGISTRY_TOML,
+        )
+        .map_err(|error| format!("注册表解析失败：{error}"))?;
+        let entry = registry
+            .require(&options.model)
+            .map_err(|error| format!("模型 {} 不在注册表：{error}", options.model))?;
+        Ok((entry.version.clone(), entry.quantization.clone()))
+    })();
+    let Ok((version, quantization)) = identity else {
+        return json!({"applied": false, "reason": identity.err().unwrap_or_default()});
+    };
+    let table = match eg_inference::calibration::CalibrationTable::load(path) {
+        Ok(table) => table,
+        Err(error) => {
+            return json!({
+                "applied": false,
+                "reason": format!("校准表不套用：{error}"),
+                "path": path.display().to_string(),
+                "identity": {"model": options.model, "version": version, "quantization": quantization},
+            });
+        }
+    };
+    if !table.matches(&options.model, &version, &quantization) {
+        return json!({
+            "applied": false,
+            "reason": "校准表 identity 与模型/版本/量化不一致，显式不套用",
+            "path": path.display().to_string(),
+            "table_id": table.id,
+            "identity": {"model": options.model, "version": version, "quantization": quantization},
+        });
+    }
+    let threshold = 0.85;
+    let successful: Vec<&EntryResult> = entries
+        .iter()
+        .filter(|entry| entry.failures.is_empty())
+        .collect();
+    let mut raw_auto = 0usize;
+    let mut raw_review = 0usize;
+    let mut raw_ok = 0usize;
+    let mut cal_auto = 0usize;
+    let mut cal_review = 0usize;
+    let mut cal_ok = 0usize;
+    let mut pairs = Vec::new();
+    for entry in &successful {
+        let raw_status = "needs_review";
+        if raw_status == entry.expected_status {
+            raw_ok += 1;
+        }
+        if raw_status == "auto_accept" {
+            raw_auto += 1;
+        } else {
+            raw_review += 1;
+        }
+        let calibrated = eg_domain::Confidence::new(entry.confidence)
+            .ok()
+            .and_then(|confidence| table.calibrate(confidence))
+            .map_or(entry.confidence, eg_domain::Confidence::get);
+        let cal_status = production_status(calibrated);
+        if cal_status == entry.expected_status {
+            cal_ok += 1;
+        }
+        if cal_status == "auto_accept" {
+            cal_auto += 1;
+        } else {
+            cal_review += 1;
+        }
+        pairs.extend(entry.ece_pairs.iter().map(|(confidence, correct)| {
+            let mapped = eg_domain::Confidence::new(*confidence)
+                .ok()
+                .and_then(|value| table.calibrate(value))
+                .map_or(*confidence, eg_domain::Confidence::get);
+            (mapped, *correct)
+        }));
+    }
+    let total = successful.len();
+    json!({
+        "applied": true,
+        "path": path.display().to_string(),
+        "table_id": table.id,
+        "identity": {"model": options.model, "version": version, "quantization": quantization},
+        "threshold": threshold,
+        "n": total,
+        "raw": {
+            "auto_accept": raw_auto,
+            "needs_review": raw_review,
+            "manual": 0,
+            "status_consistency": ratio(raw_ok, total),
+        },
+        "calibrated": {
+            "auto_accept": cal_auto,
+            "needs_review": cal_review,
+            "manual": 0,
+            "status_consistency": ratio(cal_ok, total),
+            "ece": ece_value(&pairs),
+        },
+        "delta_status_consistency": ratio(cal_ok, total) - ratio(raw_ok, total),
+        "auto_accept_delta": i64::try_from(cal_auto).unwrap_or(i64::MAX)
+            - i64::try_from(raw_auto).unwrap_or(i64::MAX),
+    })
 }
 
 fn collect_entries_failures(entries: &[EntryResult]) -> Value {
@@ -2303,6 +2449,35 @@ mod tests {
         assert!(prompt_v2.contains("judgement_criteria"));
         assert!(prompt_v2.contains("partial_score_milli"));
         assert!(!prompt_v1.contains("judgement_criteria"));
+    }
+
+    #[test]
+    fn production_status_simulation_thresholds() {
+        assert_eq!(production_status(0.9198), "auto_accept");
+        assert_eq!(production_status(0.85), "auto_accept");
+        assert_eq!(production_status(0.8499), "needs_review");
+        assert_eq!(production_status(0.0), "needs_review");
+    }
+
+    #[test]
+    fn production_calibration_rejects_identity_mismatch_and_applies_repo_table() {
+        let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../config/calibration/qwen35-4b-q4-iso-v1.json");
+        let mut options = Options::default();
+        options.apply_calibration = Some(path.clone());
+        let status = production_calibration_status(&[], &options);
+        assert_eq!(status["applied"], true);
+        assert_eq!(status["table_id"], "qwen35-4b-q4-iso-v1");
+        // 错误模型身份：显式不套用。
+        options.model = "qwen3.5-4b-router".to_owned();
+        let status = production_calibration_status(&[], &options);
+        assert_eq!(status["applied"], false);
+        assert!(
+            status["reason"]
+                .as_str()
+                .unwrap_or_default()
+                .contains("identity")
+        );
     }
 
     #[test]
