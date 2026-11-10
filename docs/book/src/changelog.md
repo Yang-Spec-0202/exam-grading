@@ -2,6 +2,27 @@
 
 > 记录规范与行为的变更（按版本倒序）。文档结构变更也在此登记。
 
+## [0.3.8] - 2026-11-11（eval 应用生产校准表 + 真实 status 复测；两处小修）
+
+### 新增（status 门禁模拟 + 真实复测）
+
+- **`egctl eval --apply-calibration <path>`**：用 eg-inference `CalibrationTable` 严格校验 identity 后，按 production
+  规则模拟 status（raw 未校准=review；校准置信度≥ModelDirect 标准阈值 0.85=auto），报告 `calibration_status`
+  raw/calibrated 分布、status_consistency、auto_accept/review 计数；结果 JSON 增加该段；新增不依赖服务的
+  status 模拟/identity 拒绝单测。
+- **两处小修**：`--write-calibration` 的 `model_version/quantization` 从注册表读取（不再写死）；
+  配置表移除 `source_artifact`，与生成器行为一致。
+- **真实复测**（qwen3.5-4b Q4_K_M，b11960-8642541b2，80/120，并发 3，v2）：
+  `target/acceptance/eval-real-judge-v2-status-20261111.json`
+  - eval **120/120 成功**；calibration 80 条 1 条 schema_violation（修复重试最终失败）。
+  - **status_consistency 23.33% → 76.67%（+53.33pp）**；auto_accept **0 → 120**（单桶 0.9198≥0.85，全部自动）。
+  - 指标：逐项 strict 98.33%、lenient 99.44%、总分精确 95.00%、半分内 100%、partial 召回 91.11%、
+    mismatch→match 0、ECE raw 0.05819 / production 校准 0.06350、Brier 0.01408→0.02042。
+  - repair 13/12/1；瞬态重试 0；失败 `schema_violation=1`；耗时 36m58s；token total 380,074。
+  - 结论：status 一致率显著提升，但全 auto 导致 28 条 gold review 被自动接受（过接受风险）；单桶校准仅粗粒度，
+    需真实教师标注/更细桶/按题型阈值验证。
+- **文档**：acceptance S3 新增「真实模型 status（校准接入后）」行；总览更新；本 changelog 记录小修。
+
 ## [0.3.7] - 2026-11-10（calibration_id 接入 JudgeOutcome/grade 门禁；合成验证）
 
 ### 新增（校准闭环）

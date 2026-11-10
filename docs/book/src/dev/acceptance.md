@@ -40,7 +40,7 @@ scripts/acceptance/run.sh --quick --skip-bench
 |---|---|---|
 | S1 全流程 | 已自动化（backend） | `egctl acceptance --fixtures fixtures/paper-20q` 全链路 PASS（287 断言/9 负向/12 步骤，含外部夹具 capture 归组 + OCR/judge 回放 + expected 逐题断言）；UI 键鼠 E2E 仍待办 |
 | S2 客观题确定性 | 已测（合成金标） | `egctl eval --gold fixtures/gold`：540 客观题，规则分数精确一致 100%、状态一致 100%、误给 0 = 0（2026-11-09） |
-| S3 解答题准确率 | 已测（合成金标；最终 v2 120/120 达标；真实 status 待复测） | fixture 基线 100%；最终 v2 120/120：逐项 98.06%、总分 94.17%、半分内 100%、ECE 0.0607；校准表已接入 inference/grade（合成验证 auto/review），**真实模型 status 复测未做** |
+| S3 解答题准确率 | 已测（合成金标；最终 v2 120/120 达标；真实 status 校准已复测） | fixture 基线 100%；最终 v2 120/120：逐项 98.06%、总分 94.17%、半分内 100%、ECE 0.0607；校准接入后真实 status 23.3%→76.7%（全 auto，过接受风险）；真实教师标注待补 |
 | S4 门禁有效 | 部分已测 | 门禁组合夹具；无真实改分数据 |
 | S5 路由准确率 | 已测（合成金标） | 770 题（540+230）：L1 规则命中 100%、route 标签 100%（阈值 ≥98%） |
 | S6 性能 | 部分已测 | 分项实测（capture/OCR/判定/导出/启动）；端到端批次未测 |
@@ -263,6 +263,22 @@ scripts/acceptance/run.sh --quick --skip-bench
   否则按原低置信/证据链规则 review。**真实模型 status 一致率复测未做**（本次不跑模型）。
 - **限制**：单桶校准只整体缩放；表按相对工作目录加载、当前无缓存；`GradeRecord` 未新增列，
   calibration_id 记录在证据链 `ModelCall.output` 中。
+
+### S3 真实模型 status（校准接入后；2026-11-11，task-80）
+
+- **命令**：
+  `egctl eval --gold fixtures/gold --real-judge --sample 80 --eval-sample 120 --calibrate --prompt v2 --concurrency 3 --apply-calibration config/calibration/qwen35-4b-q4-iso-v1.json --json --out target/acceptance/eval-real-judge-v2-status-20261111.json`
+- **实现**：`--apply-calibration` 用 eg-inference `CalibrationTable` 严格校验 `model_id/version/quantization`（表 identity 匹配才套用）；
+  eval 增加 **production 门禁模拟**：raw → `needs_review`；calibrated → 校准置信度 ≥ ModelDirect 标准阈值 **0.85** → `auto_accept`，
+  输出 `calibration_status.raw/calibrated` 分布、status_consistency、auto_accept/review/manual 计数。
+- **实测（120/120 eval 成功；calibration 80 条中 1 条 schema 失败）**：
+  - **status_consistency：raw 23.33% → calibrated 76.67%（+53.33pp）**；auto_accept **0 → 120**（单桶校准概率 0.9198 ≥0.85，全部自动接受）。
+  - 指标保持：逐项 strict **98.33%**、lenient **99.44%**、总分精确 **95.00%**、半分内 **100.00%**、partial 召回 **91.11%**、mismatch→match **0**、ECE raw 0.05819 / production 校准 0.06350、Brier 0.01408→0.02042。
+  - 失败/重试：repair attempted **13 / succeeded 12 / failed 1**（partial 缺列表 1 条最终失败）；瞬态重试 **0**；失败分类 `schema_violation=1`；耗时 **36m58s**，token total 380,074。
+  - 结论：校准接入后 status 一致率从 23.3% 提升到 76.7%，但**全部 auto_accept** 意味着 28 条 gold expected review 被自动接受（过接受）；单桶表只适合粗粒度门禁，需更细桶/按题型阈值/真实教师标注验证后再放宽。
+- **两处小修**：`--write-calibration` 的 `model_version/quantization` 从注册表条目读取（不再写死）；配置表移除 `source_artifact`，与生成器输出一致。
+- **证据**：`target/acceptance/eval-real-judge-v2-status-20261111.json`；单测：`production_status_simulation_thresholds`、`production_calibration_rejects_identity_mismatch_and_applies_repo_table`、`calibration_gate_t78`（grade）。
+- **限制**：gold status 为规则标签；单桶校准；门禁模拟使用 ModelDirect 标准阈值（真实 grade 还受证据链/冲突/路由影响）；真实场景仍需完整 pipeline 复测。
 
 ### S4 门禁有效（自动出分后被教师改分 ≤5%，按题，标准模式）
 
