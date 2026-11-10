@@ -211,3 +211,17 @@ cargo test -p eg-grade --test adapters_t30
 cargo clippy -p eg-grade --all-targets -- -D warnings
 cargo fmt -p eg-grade -- --check
 ```
+
+## 校准门禁接入（task-78，2026-11-10）
+
+- `eg_domain::JudgeOutcome` 向后兼容新增：`calibrated_confidence: Option<Confidence>`（serde default）、
+  `calibration_verified: bool`（serde default）；`is_calibrated()` 保持旧语义（有 id），新增
+  `is_calibration_applied()` = id + verified + calibrated_confidence 三者齐全（伪造 id 不通过）。
+- `eg_grade::ports::JudgeResponse` 增加 `calibrated_confidence`/`calibration_verified`；adapter 从 inference
+  `JudgeOutput` 复制；`GradeRecord.confidence` 记录校准后置信度（raw 保留在 `ModelCall.output`）。
+- pipeline：`calibrated = outcome.is_calibration_applied()`；`evidence_confidence` 优先取
+  `outcome.calibrated_confidence`，再进入既有 `compose_confidence`/`gate`（阈值/低置信/证据链逻辑不变）。
+- 无校准/伪造 id：仍 `NeedsReview(uncalibrated_model)`；阈值边界仍由 `GradeConfig.threshold` 决定。
+- 测试：`crates/eg-grade/tests/calibration_gate_t78.rs`（可信校准 auto vs 未校准 review、0.80 边界、伪 id 拒绝、
+  `GradeRecord.confidence=0.92`）；domain `judge_outcome_calibration_gate` 保留。
+- 限制：校准表匹配由 inference 保证；grade 不读表路径，只信任 `calibration_verified`。真实模型 status 复测未做。

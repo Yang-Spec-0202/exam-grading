@@ -40,7 +40,7 @@ scripts/acceptance/run.sh --quick --skip-bench
 |---|---|---|
 | S1 全流程 | 已自动化（backend） | `egctl acceptance --fixtures fixtures/paper-20q` 全链路 PASS（287 断言/9 负向/12 步骤，含外部夹具 capture 归组 + OCR/judge 回放 + expected 逐题断言）；UI 键鼠 E2E 仍待办 |
 | S2 客观题确定性 | 已测（合成金标） | `egctl eval --gold fixtures/gold`：540 客观题，规则分数精确一致 100%、状态一致 100%、误给 0 = 0（2026-11-09） |
-| S3 解答题准确率 | 已测（合成金标 + 真实 4B 采样） | fixture/规则基线：逐项 100%、总分 100%、半分内 100%（ECE 0.0933 仅规则标签）；真实 qwen3.5-4b Q4 采样 60 条：逐项 77.2%、总分精确 56.7%、半分内 83.3%、真实 ECE 0.1778、status 20%（无 calibration_id） |
+| S3 解答题准确率 | 已测（合成金标；最终 v2 120/120 达标；真实 status 待复测） | fixture 基线 100%；最终 v2 120/120：逐项 98.06%、总分 94.17%、半分内 100%、ECE 0.0607；校准表已接入 inference/grade（合成验证 auto/review），**真实模型 status 复测未做** |
 | S4 门禁有效 | 部分已测 | 门禁组合夹具；无真实改分数据 |
 | S5 路由准确率 | 已测（合成金标） | 770 题（540+230）：L1 规则命中 100%、route 标签 100%（阈值 ≥98%） |
 | S6 性能 | 部分已测 | 分项实测（capture/OCR/判定/导出/启动）；端到端批次未测 |
@@ -240,6 +240,29 @@ scripts/acceptance/run.sh --quick --skip-bench
 - **耗时/token**：**47m44s**（并发 2，超 30–35min 预算；低并发换取 0 timeout）；成功调用 599 次，token prompt 345,068 / completion 35,009 / total 380,077；失败调用与修复重试的 token 未计入汇总。
 - **证据**：`target/acceptance/eval-real-judge-v2-final-20261110.json`；单测 `transient_error_policy_is_limited_to_timeout_and_transport`、`prompt_version_selection_and_prompt_content`、partial 修复检测/校准单调性；真实测试 `#[ignore]`。
 - **限制**：gold 为合成规则标签；校准 confidence 单桶（0.8–1.0）；Brier 校准后变差；status 受 calibration_id 未接入 grade 影响；47m44s 超预算；不覆盖真实手写/OCR。
+
+### S3 校准接入生产链路（2026-11-10，task-78；合成验证，真实模型 status 复测待办）
+
+- **产物**：`config/calibration/qwen35-4b-q4-iso-v1.json`（由最终 v2 结果提取；schema 见下），
+  已登记到注册表 judge 条目 `calibration_table`，eg-inference 判定后自动加载。
+- **schema（不含学生数据）**：`schema_version/id/model_id/model_version/quantization/method/
+  table[{lower,upper,calibrated}]/fit{样本数,seed,prompt_version}/created_at/gold_sha256`；
+  当前表为单桶 `[0.8,1.0] → 0.919831`（来自 task-76 最终 360 评分项拟合）。
+- **接入点**：
+  1. egctl `--write-calibration` 默认关闭；打开时写 `config/calibration/<id>.json`；
+  2. eg-inference `ModelEntry.calibration_table` 可选；严格校验后仅当 `model_id+version+quantization`
+     三项全等才写 `calibration_id`/`calibrated_confidence`/`verified`；表缺失/版本不符 → uncalibrated；
+     原始 raw confidence 保留；
+  3. eg-grade `is_calibration_applied()` 才按校准置信度走原阈值；无校准/伪造 id 仍 review(uncalibrated)；
+     `GradeRecord.confidence` 记校准后值，raw 在 `ModelCall.output`。
+- **合成验证（不跑真实模型）**：`crates/eg-grade/tests/calibration_gate_t78.rs` 2 个测试：
+  可信校准（0.92）标准模式 **auto_accept**，同判定无校准 **needs_review(uncalibrated_model)**；
+  0.80 边界 → review(low_confidence)；伪造 id（无 verified）→ review(uncalibrated)。
+  inference 校准表单测 5 个（映射/边界/身份/缺表/仓库产物加载）。
+- **门禁前后差异**：同一条 judge 输出，接入前固定 review(uncalibrated)；接入后校准概率 ≥ 路由阈值即 auto，
+  否则按原低置信/证据链规则 review。**真实模型 status 一致率复测未做**（本次不跑模型）。
+- **限制**：单桶校准只整体缩放；表按相对工作目录加载、当前无缓存；`GradeRecord` 未新增列，
+  calibration_id 记录在证据链 `ModelCall.output` 中。
 
 ### S4 门禁有效（自动出分后被教师改分 ≤5%，按题，标准模式）
 

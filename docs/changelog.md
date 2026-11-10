@@ -2,6 +2,25 @@
 
 > 记录规范与行为的变更（按版本倒序）。文档结构变更也在此登记。
 
+## [0.3.7] - 2026-11-10（calibration_id 接入 JudgeOutcome/grade 门禁；合成验证）
+
+### 新增（校准闭环）
+
+- **校准产物**：`config/calibration/qwen35-4b-q4-iso-v1.json`（schema：id/model_id/model_version/quantization/
+  method/table/fit/created_at/gold_sha256；无学生数据），由最终 v2 结果提取；egctl `--write-calibration`
+  可在校准运行后生成（默认不写）。
+- **eg-inference**：`ModelEntry.calibration_table` 可选注册表路径；新增 `CalibrationTable`（load/validate/
+  matches/calibrate）；严格 Schema 后仅 `model_id+version+quantization` 全等才套用，表缺失/版本不符/
+  伪报 id → 保持 uncalibrated；raw confidence 保留，校准值单独字段。
+- **eg-domain / eg-grade**：`JudgeOutcome` 向后兼容新增 `calibrated_confidence`/`calibration_verified`；
+  `is_calibration_applied()` 要求三者齐全（伪造 id 拒绝）；`JudgeResponse` 同步字段；pipeline 只用可信校准
+  置信度进入原阈值，`GradeRecord.confidence` 记校准后值（raw 在 ModelCall.output）。
+- **合成验证**：`cargo test -p eg-grade --test calibration_gate_t78`（2 个）证明同判定下
+  未校准→needs_review(uncalibrated_model)、可信校准 0.92→auto_accept、0.80 边界→low_confidence、伪 id 拒绝；
+  eg-inference 校准表单测 5 个（含仓库产物加载）。**未跑真实模型**，真实 status 复测待办。
+- **文档**：`docs/dev/acceptance.md` S3 新增「校准接入生产链路」段；`docs/dev/research/inference.md`、
+  `grade.md` 补 schema/接入点/限制。
+
 ## [0.3.6] - 2026-11-10（最终 v2 复测：并发 2 + 超时重试，120/120，S3 达标）
 
 ### 新增（瞬态重试 + 最终复测）

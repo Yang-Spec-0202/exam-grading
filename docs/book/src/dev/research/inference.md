@@ -227,3 +227,30 @@ curl -s http://127.0.0.1:8082/v1/chat/completions -H 'Content-Type: application/
   -d '{"model":"qwen3.5-4b-instruct","messages":[{"role":"user","content":"ping"}],"max_tokens":8}'
 ./scripts/model/serve.sh stop all
 ```
+
+## 校准表接入（task-78，2026-11-10）
+
+### 产物与 schema
+
+- 位置：`config/calibration/<calibration_id>.json`（egctl `--calibrate --write-calibration` 生成；
+  本次由 `target/acceptance/eval-real-judge-v2-final-20261110.json` 提取）。
+- 字段：`schema_version`、`id`、`model_id`、`model_version`、`quantization`、`method`、
+  `table[{lower,upper,calibrated}]`、`fit`（样本数/seed/prompt 版本，**不含学生数据**）、`created_at`、`gold_sha256`。
+- 代码：`crates/eg-inference/src/calibration.rs`（`CalibrationTable::load/validate/matches/calibrate`）。
+
+### 接入点与语义
+
+- 注册表 `ModelEntry.calibration_table: Option<String>`（`[[models]]` 可选键；默认 judge 条目指向
+  `config/calibration/qwen35-4b-q4-iso-v1.json`）。
+- `InferenceService::apply_calibration` 在严格 Schema 校验后、写 `ModelCall` 前：
+  1. 先清除模型自报的 `calibration_id/calibrated_confidence`（防止伪报）；
+  2. 表缺失/不可读/schema 不符 → 不套用（保持 uncalibrated）；
+  3. `model_id + model_version + quantization` 三项全等才套用：写 `calibration_id`、
+     `calibrated_confidence`、`calibration_verified=true`；
+  4. 原始 `confidence` 保留在 `JudgeOutput` 与 `ModelCall.output`；校准值单独字段。
+- 单元测试（不依赖服务）：映射边界/最近桶、schema/单调性拒绝、身份匹配、缺表错误、仓库产物加载。
+
+### 已知限制
+
+- 表按工作目录相对路径解析；路径缺失仅降级为 uncalibrated（不启动失败）。
+- 当前无表缓存（每次判定读一次 JSON，文件 <1KB）；若调用量增大应加进程内缓存并带 mtime 校验。
