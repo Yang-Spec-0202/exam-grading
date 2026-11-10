@@ -50,6 +50,7 @@ enum Command {
 }
 
 /// 解析后的参数。
+#[allow(clippy::struct_excessive_bools, reason = "CLI 开关天然为独立布尔参数")]
 struct Args {
     data_dir: Option<PathBuf>,
     json: bool,
@@ -66,6 +67,11 @@ struct Args {
     model: Option<String>,
     sample: Option<usize>,
     concurrency: usize,
+    calibrate: bool,
+    ab: bool,
+    ab_sample: Option<usize>,
+    eval_sample: Option<usize>,
+    prompt: String,
     command: Command,
 }
 
@@ -347,7 +353,31 @@ fn run_eval(args: &Args) -> Result<u8, String> {
             sample: args.sample.or(Some(60)),
             concurrency: args.concurrency,
             timeout: std::time::Duration::from_secs(20),
+            calibrate: args.calibrate,
+            ab: args.ab,
+            ab_sample: args.ab_sample.or(Some(30)),
+            eval_sample: args.eval_sample,
+            prompt: if args.prompt == "v2" {
+                eval_real::PromptVersion::V2
+            } else {
+                eval_real::PromptVersion::V1
+            },
         };
+        if args.calibrate {
+            let report = eval_real::run_calibrated(&options)?;
+            if args.json {
+                let value = report.to_json();
+                let text = serde_json::to_string_pretty(&value).unwrap_or_default();
+                if let Some(out) = &args.out {
+                    std::fs::write(out, &text)
+                        .map_err(|error| format!("写 {} 失败：{error}", out.display()))?;
+                }
+                println!("{text}");
+            } else {
+                println!("{}", report.render_human());
+            }
+            return Ok(0);
+        }
         let report = eval_real::run(&options)?;
         if args.json {
             let value = report.to_json();
@@ -402,6 +432,11 @@ fn parse_args() -> Result<Args, String> {
     let mut model = None;
     let mut sample = None;
     let mut concurrency = 1usize;
+    let mut calibrate = false;
+    let mut ab = false;
+    let mut ab_sample = None;
+    let mut eval_sample = None;
+    let mut prompt = "v1".to_owned();
     let mut tokens: Vec<String> = Vec::new();
 
     let mut args = std::env::args().skip(1);
@@ -436,6 +471,36 @@ fn parse_args() -> Result<Args, String> {
                     .map_err(|_| format!("--max-sha-mib 非法：{value}"))?;
             }
             "--real-judge" => real_judge = true,
+            "--calibrate" => calibrate = true,
+            "--ab" => ab = true,
+            "--eval-sample" => {
+                let value = args
+                    .next()
+                    .ok_or_else(|| "--eval-sample 需要一个整数".to_owned())?;
+                eval_sample = Some(
+                    value
+                        .parse()
+                        .map_err(|_| format!("--eval-sample 非法：{value}"))?,
+                );
+            }
+            "--prompt" => {
+                prompt = args
+                    .next()
+                    .ok_or_else(|| "--prompt 需要 v1 或 v2".to_owned())?;
+                if prompt != "v1" && prompt != "v2" {
+                    return Err(format!("--prompt 只支持 v1/v2：{prompt}"));
+                }
+            }
+            "--ab-sample" => {
+                let value = args
+                    .next()
+                    .ok_or_else(|| "--ab-sample 需要一个整数".to_owned())?;
+                ab_sample = Some(
+                    value
+                        .parse()
+                        .map_err(|_| format!("--ab-sample 非法：{value}"))?,
+                );
+            }
             "--judge-endpoint" => {
                 judge_endpoint = Some(
                     args.next()
@@ -554,6 +619,11 @@ fn parse_args() -> Result<Args, String> {
         model,
         sample,
         concurrency,
+        calibrate,
+        ab,
+        ab_sample,
+        eval_sample,
+        prompt,
         command,
     })
 }
@@ -592,6 +662,11 @@ fn print_help() {
            --model <name>         真实 judge 模型名（默认 qwen3.5-4b-instruct）\n\
            --sample <N>           eval --real-judge 抽样条数（默认 60；0=全量）\n\
            --concurrency <N>      eval --real-judge 并发请求数（默认 1，≤4）\n\
+           --calibrate            eval --real-judge 校准模式（拆 calibration/eval，各 --sample 条）\n\
+           --ab                   eval --real-judge 校准模式附带提示词 v1/v2 A/B（--ab-sample 条）\n\
+           --ab-sample <N>        A/B 样本条数（默认 30）\n\
+           --eval-sample <N>      eval 样本条数（v2 重校准用 120；默认=--sample）\n\
+           --prompt <v1|v2>       calibration/eval 使用的提示词（默认 v1；A/B 始终双跑）\n\
          \n\
          退出码：0 = OK，2 = WARN（有降级/未就绪项），1 = ERROR",
         env!("CARGO_PKG_VERSION")

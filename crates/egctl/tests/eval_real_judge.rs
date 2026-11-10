@@ -4,7 +4,7 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use egctl::eval_real::{Options, run};
+use egctl::eval_real::{Options, run, run_calibrated};
 
 #[test]
 #[ignore = "需要本地 judge http://127.0.0.1:8082/v1；普通 CI 不依赖服务"]
@@ -23,4 +23,23 @@ fn real_judge_smoke_reports_metrics() {
     );
     assert!(report.metrics["item_total"].as_u64().unwrap_or(0) > 0);
     assert!(report.latency["calls"].as_u64().unwrap_or(0) > 0);
+}
+
+#[test]
+#[ignore = "需要本地 judge；校准+A/B 真实模型冒烟（样本 1+1+1）"]
+fn real_judge_calibrated_smoke() {
+    let report = run_calibrated(&Options {
+        gold: std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/gold"),
+        sample: Some(1),
+        concurrency: 1,
+        calibrate: true,
+        ab: true,
+        ab_sample: Some(1),
+        prompt: egctl::eval_real::PromptVersion::V2,
+        ..Options::default()
+    })
+    .expect("校准模式应成功");
+    assert!(report.calibration["bins"].as_u64().unwrap_or(0) > 0);
+    assert_eq!(report.eval["n"].as_u64().unwrap_or(0), 1);
+    assert!(report.ab.is_some());
 }

@@ -8,7 +8,7 @@
 //! - gold 的 `expected.steps[].matched` 是合成规则标签，不是模型标注；真实 ECE 用模型实际 confidence。
 //! - 不调参、不改 gold；失败/超时逐项分类并保留样本（脱敏）。
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::path::PathBuf;
@@ -39,6 +39,16 @@ pub struct Options {
     pub concurrency: usize,
     /// 单次请求超时。
     pub timeout: Duration,
+    /// 校准模式：固定 seed 拆 calibration/eval（各 sample 条），校准后仅 eval 评估。
+    pub calibrate: bool,
+    /// 提示词 A/B：在独立的 ab_sample 条上同批对比 v1/v2。
+    pub ab: bool,
+    /// A/B 样本条数（默认 30）。
+    pub ab_sample: Option<usize>,
+    /// 校准模式下 eval 样本条数（默认 = sample；v2 复测用 120）。
+    pub eval_sample: Option<usize>,
+    /// 校准/正式评估使用的提示词版本（A/B 始终同时跑 v1/v2）。
+    pub prompt: PromptVersion,
 }
 
 impl Default for Options {
@@ -50,6 +60,11 @@ impl Default for Options {
             sample: Some(60),
             concurrency: 1,
             timeout: Duration::from_secs(20),
+            calibrate: false,
+            ab: false,
+            ab_sample: Some(30),
+            eval_sample: None,
+            prompt: PromptVersion::V1,
         }
     }
 }
@@ -84,6 +99,30 @@ impl FailureKind {
             Self::ContentNotJson => "content_not_json",
             Self::SchemaViolation => "schema_violation",
         }
+    }
+}
+
+/// 提示词版本（A/B）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PromptVersion {
+    /// 现有提示词（二值）。
+    V1,
+    /// v2：明确 match/partial/mismatch 判据与逐项要求。
+    V2,
+}
+
+/// 当前 run/run_calibrated 使用的提示词版本（CLI `--prompt` 的唯一入口）。
+#[must_use]
+fn selected_prompt(options: &Options) -> PromptVersion {
+    options.prompt
+}
+
+/// 稳定标签（JSON/日志）。
+#[must_use]
+fn prompt_version_label(version: PromptVersion) -> &'static str {
+    match version {
+        PromptVersion::V1 => "v1",
+        PromptVersion::V2 => "v2",
     }
 }
 
@@ -123,6 +162,18 @@ struct EntryResult {
     prompt_tokens: u64,
     completion_tokens: u64,
     ece_pairs: Vec<(f64, bool)>,
+    /// (expected_matched, actual_matched, judgement, confidence) —— A/B 与校准用。
+    observations: Vec<(bool, bool, String, f64)>,
+    /// 模型输出 partial 的次数。
+    partial_calls: usize,
+    /// schema 修复重试次数/成功次数/失败次数。
+    repair_attempted: u64,
+    repair_succeeded: u64,
+    repair_failed: u64,
+    /// 瞬态超时/连接错误重试次数（成功/失败）。
+    transport_retries: u64,
+    transport_retry_succeeded: u64,
+    transport_retry_failed: u64,
     failures: Vec<FailureSample>,
 }
 
@@ -351,7 +402,7 @@ pub fn run(options: &Options) -> Result<Report, String> {
         options.timeout,
     )?);
     let concurrency = options.concurrency.clamp(1, 4);
-    let entries = call_entries(&client, &selected, concurrency);
+    let entries = call_entries(&client, &selected, concurrency, selected_prompt(options));
     let mut confusion: BTreeMap<String, BTreeMap<String, u64>> = BTreeMap::new();
     let mut prompt_tokens = 0u64;
     let mut completion_tokens = 0u64;
@@ -593,11 +644,12 @@ fn call_entries(
     client: &Arc<JudgeClient>,
     items: &[&SolutionItem],
     concurrency: usize,
+    version: PromptVersion,
 ) -> Vec<EntryResult> {
     if concurrency <= 1 {
         return items
             .iter()
-            .map(|item| judge_item_entry(client, item))
+            .map(|item| judge_item_entry(client, item, version))
             .collect();
     }
     let total = items.len();
@@ -609,7 +661,7 @@ fn call_entries(
             let client = Arc::clone(client);
             handles.push(scope.spawn(move || {
                 part.iter()
-                    .map(|item| judge_item_entry(&client, item))
+                    .map(|item| judge_item_entry(&client, item, version))
                     .collect::<Vec<_>>()
             }));
         }
@@ -620,7 +672,11 @@ fn call_entries(
     results
 }
 
-fn judge_item_entry(client: &JudgeClient, item: &SolutionItem) -> EntryResult {
+fn judge_item_entry(
+    client: &JudgeClient,
+    item: &SolutionItem,
+    version: PromptVersion,
+) -> EntryResult {
     let Some(rubric) = item.rubric.as_ref() else {
         return EntryResult {
             qid: item.qid.clone(),
@@ -641,6 +697,14 @@ fn judge_item_entry(client: &JudgeClient, item: &SolutionItem) -> EntryResult {
             prompt_tokens: 0,
             completion_tokens: 0,
             ece_pairs: Vec::new(),
+            observations: Vec::new(),
+            partial_calls: 0,
+            repair_attempted: 0,
+            repair_succeeded: 0,
+            repair_failed: 0,
+            transport_retries: 0,
+            transport_retry_succeeded: 0,
+            transport_retry_failed: 0,
             failures: vec![FailureSample {
                 qid: item.qid.clone(),
                 perturbation: category(item),
@@ -657,6 +721,14 @@ fn judge_item_entry(client: &JudgeClient, item: &SolutionItem) -> EntryResult {
     let mut completion_tokens = 0u64;
     let mut confidences = Vec::new();
     let mut ece_pairs = Vec::new();
+    let mut observations = Vec::new();
+    let mut partial_calls = 0usize;
+    let mut repair_attempted = 0u64;
+    let mut repair_succeeded = 0u64;
+    let mut repair_failed = 0u64;
+    let mut transport_retries = 0u64;
+    let mut transport_retry_succeeded = 0u64;
+    let mut transport_retry_failed = 0u64;
     let mut calibration_present = false;
     let mut item_total = 0usize;
     let mut item_match_ok = 0usize;
@@ -671,6 +743,7 @@ fn judge_item_entry(client: &JudgeClient, item: &SolutionItem) -> EntryResult {
             item,
             rubric_item.criterion.as_str(),
             rubric_item.points.as_milli(),
+            version,
         );
         match client.judge(&prompt, rubric_item.points) {
             Ok(response) => {
@@ -679,19 +752,39 @@ fn judge_item_entry(client: &JudgeClient, item: &SolutionItem) -> EntryResult {
                 completion_tokens += response.completion_tokens;
                 confidences.push(response.confidence);
                 calibration_present |= response.calibration_present;
+                repair_attempted += u64::from(response.repair_attempted);
+                repair_succeeded += u64::from(response.repair_succeeded);
+                transport_retries += u64::from(response.transport_retried);
+                transport_retry_succeeded +=
+                    u64::from(response.transport_retried && response.transport_succeeded);
                 let matched = response.judgement == "match";
+                if response.judgement == "partial" {
+                    partial_calls += 1;
+                }
                 if matched {
                     satisfied.push(rubric_item.id);
                 }
-                if expected_item.is_some_and(|step| step.matched == matched) {
+                let expected_matched = expected_item.is_some_and(|step| step.matched);
+                if expected_matched == matched {
                     item_match_ok += 1;
                 }
-                ece_pairs.push((
+                ece_pairs.push((response.confidence, expected_matched == matched));
+                observations.push((
+                    expected_matched,
+                    matched,
+                    response.judgement.clone(),
                     response.confidence,
-                    expected_item.is_some_and(|step| step.matched == matched),
                 ));
             }
             Err(error) => {
+                if error.detail.contains("修复重试仍失败") {
+                    repair_attempted += 1;
+                    repair_failed += 1;
+                }
+                if error.detail.contains("瞬态错误重试 1 次仍失败") {
+                    transport_retries += 1;
+                    transport_retry_failed += 1;
+                }
                 failures.push(FailureSample {
                     qid: item.qid.clone(),
                     perturbation: category(item),
@@ -757,11 +850,31 @@ fn judge_item_entry(client: &JudgeClient, item: &SolutionItem) -> EntryResult {
         prompt_tokens,
         completion_tokens,
         ece_pairs,
+        observations,
+        partial_calls,
+        repair_attempted,
+        repair_succeeded,
+        repair_failed,
+        transport_retries,
+        transport_retry_succeeded,
+        transport_retry_failed,
         failures,
     }
 }
 
-fn item_prompt(item: &SolutionItem, criterion: &str, points_milli: i64) -> String {
+fn item_prompt(
+    item: &SolutionItem,
+    criterion: &str,
+    points_milli: i64,
+    version: PromptVersion,
+) -> String {
+    match version {
+        PromptVersion::V1 => item_prompt_v1(item, criterion, points_milli),
+        PromptVersion::V2 => item_prompt_v2(item, criterion, points_milli),
+    }
+}
+
+fn item_prompt_v1(item: &SolutionItem, criterion: &str, points_milli: i64) -> String {
     let steps: Vec<Value> = item
         .student_steps
         .iter()
@@ -782,6 +895,52 @@ fn item_prompt(item: &SolutionItem, criterion: &str, points_milli: i64) -> Strin
             "score_milli": format!("match={points_milli}；mismatch=0"),
             "reason": "中文理由，≤120 字",
             "confidence": "0–1，表示对本次判断的把握"
+        }
+    })
+    .to_string()
+}
+
+fn item_prompt_v2(item: &SolutionItem, criterion: &str, points_milli: i64) -> String {
+    let steps: Vec<Value> = item
+        .student_steps
+        .iter()
+        .map(|step| json!({"ordinal": step.ordinal, "text": step.text, "latex": step.latex}))
+        .collect();
+    let partial_score = ((points_milli / 2) / 1000 * 1000)
+        .max(1000)
+        .min(points_milli - 1000);
+    json!({
+        "task": "判断学生步骤是否满足指定评分项（逐项独立判定）",
+        "question": {
+            "qid": item.qid,
+            "kind": format!("{:?}", item.kind).to_lowercase(),
+            "max_score_milli": item.max_score_milli,
+            "answer_key": item.answer_key,
+        },
+        "rubric_item": {"criterion": criterion, "points_milli": points_milli},
+        "student_steps": steps,
+        "judgement_criteria": {
+            "match": "学生步骤包含该评分项的关键要素或等价表达（允许简化、不同书写/公式排版、无明确步骤标题）；且没有相反/错误内容",
+            "partial": "部分覆盖但不足以完全满足（缺关键要素或过程不完整）。此时 score_milli 取 (0,满分) 之间的值（建议 partial_score_milli），satisfied 写 [criterion]，missing 写缺失要素",
+            "mismatch": "完全缺失，或关键结果/推理错误，或与 criterion 相反",
+            "important": "只有关键结果错误才 mismatch；书写简略、公式步骤被合并但关键要素存在时应 match 或 partial，不要直接 mismatch"
+        },
+        "partial_score_milli": partial_score,
+        "example_partial": {
+            "judgement": "partial",
+            "score_milli": partial_score,
+            "reason": "部分满足：缺少关键步骤",
+            "confidence": 0.7,
+            "satisfied": [criterion],
+            "missing": ["缺失的关键要素"]
+        },
+        "output_contract": {
+            "judgement": "match | partial | mismatch",
+            "score_milli": format!("match={points_milli}；partial=(0,{points_milli})（建议 {partial_score}）；mismatch=0"),
+            "reason": "中文理由，≤120 字",
+            "confidence": "0–1，表示对本次判断的把握",
+            "satisfied": "仅 partial 时非空（如 [criterion]）",
+            "missing": "仅 partial 时非空（缺失要素）"
         }
     })
     .to_string()
@@ -851,6 +1010,847 @@ fn wilson_interval(successes: usize, total: usize) -> (f64, f64) {
 }
 
 // ---------------------------------------------------------------------------
+// 校准 + 提示词 A/B（task-72）
+// ---------------------------------------------------------------------------
+
+/// 校准 ID（写入报告/eval 输出；JudgeOutcome 结构暂无该字段，见限制）。
+pub const CALIBRATION_ID: &str = "qwen35-4b-q4-iso-v1";
+
+/// 等频分桶 + PAV 单调校准表。
+#[derive(Debug, Clone)]
+pub struct Calibrator {
+    bins: Vec<CalBin>,
+    fallback: f64,
+    id: &'static str,
+}
+
+#[derive(Debug, Clone)]
+struct CalBin {
+    lower: f64,
+    upper: f64,
+    count: u64,
+    accuracy: f64,
+}
+
+impl Calibrator {
+    /// 空校准表（恒等映射，ECE/Brier 用原始 confidence）。
+    #[must_use]
+    pub fn identity() -> Self {
+        Self {
+            bins: Vec::new(),
+            fallback: 0.5,
+            id: CALIBRATION_ID,
+        }
+    }
+
+    /// 等频分桶（`bin_count` 个近似等量桶）后用 PAV 合并违反单调的相邻桶。
+    #[must_use]
+    pub fn fit(pairs: &[(f64, bool)], bin_count: usize) -> Self {
+        if pairs.is_empty() {
+            return Self::identity();
+        }
+        let bins = if bin_count <= 1 {
+            1
+        } else {
+            bin_count.min(pairs.len())
+        };
+        let mut sorted = pairs.to_vec();
+        sorted.sort_by(|left, right| {
+            left.0
+                .partial_cmp(&right.0)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        // 先按 confidence 去重成组（同值不拆桶，否则相同 confidence 会被分到不同
+        // 训练桶，映射结果依赖桶顺序）；再在组粒度上合并到 ≤bin_count 个近等频桶。
+        let mut groups: Vec<CalBin> = Vec::new();
+        for (confidence, correct) in &sorted {
+            if let Some(last) = groups.last_mut()
+                && (last.upper - *confidence).abs() <= f64::EPSILON
+            {
+                last.count += 1;
+                let correct = u64::from(*correct);
+                last.accuracy =
+                    (last.accuracy * (last.count - 1) as f64 + correct as f64) / last.count as f64;
+                continue;
+            }
+            groups.push(CalBin {
+                lower: *confidence,
+                upper: *confidence,
+                count: 1,
+                accuracy: f64::from(u32::from(*correct)),
+            });
+        }
+        let total = sorted.len();
+        let target = total.div_ceil(bins);
+        let mut raw: Vec<CalBin> = Vec::with_capacity(bins);
+        let mut current: Option<CalBin> = None;
+        for group in groups {
+            match current.take() {
+                None => current = Some(group),
+                Some(mut bin) => {
+                    let can_start_new = raw.len() + 1 < bins
+                        && bin.count >= u64::try_from(target).unwrap_or(u64::MAX);
+                    if can_start_new {
+                        raw.push(bin);
+                        current = Some(group);
+                    } else {
+                        let weight = bin.count + group.count;
+                        bin.accuracy = (bin.accuracy * bin.count as f64
+                            + group.accuracy * group.count as f64)
+                            / weight as f64;
+                        bin.count = weight;
+                        bin.upper = group.upper;
+                        current = Some(bin);
+                    }
+                }
+            }
+        }
+        if let Some(bin) = current {
+            raw.push(bin);
+        }
+        // PAV：相邻桶 accuracy 必须非降；违反则按样本加权合并。
+        let mut merged: Vec<CalBin> = Vec::with_capacity(raw.len());
+        for bin in raw {
+            merged.push(bin);
+            while merged.len() >= 2 {
+                let length = merged.len();
+                let left = &merged[length - 2];
+                let right = &merged[length - 1];
+                if left.accuracy <= right.accuracy + f64::EPSILON {
+                    break;
+                }
+                let left_weight = left.count as f64;
+                let right_weight = right.count as f64;
+                let count = left.count + right.count;
+                let accuracy =
+                    (left.accuracy * left_weight + right.accuracy * right_weight) / count as f64;
+                let combined = CalBin {
+                    lower: left.lower.min(right.lower),
+                    upper: left.upper.max(right.upper),
+                    count,
+                    accuracy,
+                };
+                merged.truncate(length - 2);
+                merged.push(combined);
+            }
+        }
+        let fallback =
+            pairs.iter().filter(|(_, correct)| *correct).count() as f64 / pairs.len() as f64;
+        Self {
+            bins: merged,
+            fallback,
+            id: CALIBRATION_ID,
+        }
+    }
+
+    /// 将原始 confidence 映射为校准概率（单调非降；查不到桶时取最近区间）。
+    #[must_use]
+    pub fn calibrate(&self, confidence: f64) -> f64 {
+        let confidence = confidence.clamp(0.0, 1.0);
+        if self.bins.is_empty() {
+            return self.fallback;
+        }
+        for bin in &self.bins {
+            if confidence >= bin.lower && confidence <= bin.upper {
+                return bin.accuracy;
+            }
+        }
+        // 落在桶间空隙/边界之外：取区间距离最近者。
+        self.bins
+            .iter()
+            .min_by(|left, right| {
+                distance(confidence, left)
+                    .partial_cmp(&distance(confidence, right))
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .map_or(self.fallback, |bin| bin.accuracy)
+    }
+
+    /// 校准 ID。
+    #[must_use]
+    pub const fn id(&self) -> &'static str {
+        self.id
+    }
+
+    /// 校准后可靠性表（按校准后概率分桶：n/平均校准值/准确率）。
+    #[must_use]
+    pub fn reliability_table_after(&self, pairs: &[(f64, bool)]) -> Value {
+        let mapped: Vec<(f64, bool)> = pairs
+            .iter()
+            .map(|(confidence, correct)| (self.calibrate(*confidence), *correct))
+            .collect();
+        let mut bins = vec![(0u64, 0.0f64, 0u64); 10];
+        for (confidence, correct) in &mapped {
+            let index = ((confidence.clamp(0.0, 0.999_999) * 10.0) as usize).min(9);
+            bins[index].0 += 1;
+            bins[index].1 += confidence;
+            if *correct {
+                bins[index].2 += 1;
+            }
+        }
+        bins.iter()
+            .enumerate()
+            .filter(|(_, (count, _, _))| *count > 0)
+            .map(|(index, (count, sum, correct))| {
+                let n = *count as f64;
+                json!({
+                    "range": [index as f64 / 10.0, (index + 1) as f64 / 10.0],
+                    "n": count,
+                    "avg_calibrated": sum / n,
+                    "accuracy": f64::from(u32::try_from(*correct).unwrap_or(0)) / n,
+                })
+            })
+            .collect::<Vec<_>>()
+            .into()
+    }
+
+    /// 校准前可靠性表（按原始 confidence 分桶：n/平均原始 confidence/准确率/平均校准值）。
+    #[must_use]
+    pub fn reliability_table(&self, pairs: &[(f64, bool)]) -> Value {
+        let mut bins = vec![(0u64, 0.0f64, 0u64, 0.0f64); 10];
+        for (confidence, correct) in pairs {
+            let index = ((confidence.clamp(0.0, 0.999_999) * 10.0) as usize).min(9);
+            let bin = &mut bins[index];
+            bin.0 += 1;
+            bin.1 += confidence;
+            if *correct {
+                bin.2 += 1;
+            }
+            bin.3 += self.calibrate(*confidence);
+        }
+        bins.iter()
+            .enumerate()
+            .filter(|(_, (count, _, _, _))| *count > 0)
+            .map(|(index, (count, sum, correct, calibrated_sum))| {
+                let n = *count as f64;
+                json!({
+                    "range": [index as f64 / 10.0, (index + 1) as f64 / 10.0],
+                    "n": count,
+                    "avg_raw_confidence": sum / n,
+                    "accuracy": f64::from(u32::try_from(*correct).unwrap_or(0)) / n,
+                    "avg_calibrated": calibrated_sum / n,
+                })
+            })
+            .collect::<Vec<_>>()
+            .into()
+    }
+}
+
+fn distance(confidence: f64, bin: &CalBin) -> f64 {
+    if confidence < bin.lower {
+        bin.lower - confidence
+    } else if confidence > bin.upper {
+        confidence - bin.upper
+    } else {
+        0.0
+    }
+}
+
+/// 校准/AB 报告。
+#[derive(Debug, Clone)]
+pub struct CalibratedReport {
+    /// 服务/提示词信息。
+    pub service: Value,
+    /// 数据拆分。
+    pub split: Value,
+    /// 校准表。
+    pub calibration: Value,
+    /// 仅 eval 集的校准前后指标。
+    pub eval: Value,
+    /// A/B 结果（`None` = 未启用）。
+    pub ab: Option<Value>,
+    /// 失败分类。
+    pub failures: Value,
+    /// 机械修复重试统计。
+    pub repairs: Value,
+    /// 瞬态超时/连接重试统计。
+    pub retries: Value,
+    /// 耗时/token。
+    pub duration_ms: u128,
+    /// token 用量。
+    pub tokens: Value,
+    /// 警告。
+    pub warnings: Vec<String>,
+    /// gold hash。
+    pub gold_hash: String,
+    /// 逐条 eval 样本（脱敏，最多 40）。
+    pub samples: Vec<Value>,
+}
+
+impl CalibratedReport {
+    /// JSON 输出。
+    #[must_use]
+    pub fn to_json(&self) -> Value {
+        json!({
+            "tool": "egctl",
+            "command": "eval",
+            "mode": "real_judge_calibrated",
+            "calibration_id": CALIBRATION_ID,
+            "service": self.service,
+            "split": self.split,
+            "calibration": self.calibration,
+            "eval": self.eval,
+            "ab": self.ab,
+            "failures": self.failures,
+            "repairs": self.repairs,
+            "retries": self.retries,
+            "duration_ms": self.duration_ms,
+            "tokens": self.tokens,
+            "warnings": self.warnings,
+            "gold_sha256": self.gold_hash,
+            "samples": self.samples,
+        })
+    }
+
+    /// 人读输出。
+    #[must_use]
+    pub fn render_human(&self) -> String {
+        let mut out = String::new();
+        out.push_str(&format!(
+            "egctl eval --real-judge --calibrate（calibration_id={CALIBRATION_ID}）\n\
+             拆分：{}；服务：{} {}\n",
+            self.split, self.service["endpoint"], self.service["model"]
+        ));
+        if let Some(eval) = self.eval.as_object() {
+            out.push_str(&format!(
+                "eval n={}：raw ECE={:.4} Brier={:.4}；校准后 ECE={:.4} Brier={:.4}\n",
+                eval.get("n").and_then(Value::as_u64).unwrap_or(0),
+                self.eval
+                    .pointer("/raw/ece")
+                    .and_then(Value::as_f64)
+                    .unwrap_or(0.0),
+                self.eval
+                    .pointer("/raw/brier")
+                    .and_then(Value::as_f64)
+                    .unwrap_or(0.0),
+                self.eval
+                    .pointer("/calibrated/ece")
+                    .and_then(Value::as_f64)
+                    .unwrap_or(0.0),
+                self.eval
+                    .pointer("/calibrated/brier")
+                    .and_then(Value::as_f64)
+                    .unwrap_or(0.0),
+            ));
+            out.push_str(&format!(
+                "  逐项 strict={:.2}% lenient={:.2}%；总分精确={:.2}%；半分内={:.2}%；status raw/cal={:.2}%/{:.2}%\n",
+                self.eval.pointer("/raw/item_match_accuracy").and_then(Value::as_f64).unwrap_or(0.0) * 100.0,
+                self.eval.pointer("/raw/item_lenient_accuracy").and_then(Value::as_f64).unwrap_or(0.0) * 100.0,
+                self.eval.pointer("/raw/score_exact_accuracy").and_then(Value::as_f64).unwrap_or(0.0) * 100.0,
+                self.eval.pointer("/raw/within_half_accuracy").and_then(Value::as_f64).unwrap_or(0.0) * 100.0,
+                self.eval.pointer("/raw/status_consistency").and_then(Value::as_f64).unwrap_or(0.0) * 100.0,
+                self.eval.pointer("/calibrated/status_consistency").and_then(Value::as_f64).unwrap_or(0.0) * 100.0,
+            ));
+        }
+        if let Some(ab) = self.ab.as_ref().and_then(Value::as_object) {
+            for version in ["v1", "v2"] {
+                if let Some(metrics) = ab.get(version).and_then(Value::as_object) {
+                    out.push_str(&format!(
+                        "A/B {version}: 逐项 strict={:.2}% lenient={:.2}% partial召回={:.2}% mismatch→match={} 总分精确={:.2}%\n",
+                        metrics.get("item_match_accuracy").and_then(Value::as_f64).unwrap_or(0.0)*100.0,
+                        metrics.get("item_lenient_accuracy").and_then(Value::as_f64).unwrap_or(0.0)*100.0,
+                        metrics.get("partial_recall").and_then(Value::as_f64).unwrap_or(0.0)*100.0,
+                        metrics.get("mismatch_to_match").and_then(Value::as_u64).unwrap_or(0),
+                        metrics.get("score_exact_accuracy").and_then(Value::as_f64).unwrap_or(0.0)*100.0,
+                    ));
+                }
+            }
+        }
+        out.push_str(&format!(
+            "耗时 {} ms；token {}；失败 {}\n",
+            self.duration_ms, self.tokens, self.failures
+        ));
+        for warning in &self.warnings {
+            out.push_str(&format!("WARN: {warning}\n"));
+        }
+        out
+    }
+}
+
+/// `--calibrate` 模式：拆 calibration/eval（固定 seed 分层）+ 可选 A/B，严格无泄漏。
+pub fn run_calibrated(options: &Options) -> Result<CalibratedReport, String> {
+    let started = Instant::now();
+    let solution_path = options.gold.join("solution-200.json");
+    let bytes = std::fs::read(&solution_path)
+        .map_err(|error| format!("读取 {} 失败：{error}", solution_path.display()))?;
+    let hash = eg_domain::Sha256Hex::of(&bytes).to_hex();
+    let dataset: SolutionDataset = serde_json::from_slice(&bytes)
+        .map_err(|error| format!("解析 solution-200.json 失败：{error}"))?;
+    let mut eligible: Vec<&SolutionItem> = dataset
+        .items
+        .iter()
+        .filter(|item| item.expected.route == "rubric_itemized")
+        .collect();
+    let skipped_manual = dataset
+        .items
+        .iter()
+        .filter(|item| item.expected.route == "manual")
+        .count();
+    let sample = options.sample.unwrap_or(60);
+    let eval_sample = options.eval_sample.unwrap_or(sample);
+    if sample == 0 || eval_sample == 0 {
+        return Err("--calibrate 需要固定样本（--sample/--eval-sample >0），不支持全量".to_owned());
+    }
+    let ab_n = if options.ab {
+        options.ab_sample.unwrap_or(30)
+    } else {
+        0
+    };
+    let total = sample + eval_sample + ab_n;
+    if total > eligible.len() {
+        return Err(format!(
+            "拆分需要 {total} 条（calibration {sample}+eval {eval_sample}+ab {ab_n}），仅 {} 条可用",
+            eligible.len()
+        ));
+    }
+    let ordered = stratified_sample(&mut eligible, total);
+    let calibration_items: Vec<&SolutionItem> = ordered[..sample].to_vec();
+    let eval_items: Vec<&SolutionItem> = ordered[sample..sample + eval_sample].to_vec();
+    let ab_items: Vec<&SolutionItem> = ordered[sample + eval_sample..].to_vec();
+    let props = fetch_props(&options.endpoint);
+    let client = Arc::new(JudgeClient::new(
+        &options.endpoint,
+        options.model.clone(),
+        options.timeout,
+    )?);
+    let concurrency = options.concurrency.clamp(1, 4);
+    let calibration_entries = call_entries(
+        &client,
+        &calibration_items,
+        concurrency,
+        selected_prompt(options),
+    );
+    let eval_entries = call_entries(&client, &eval_items, concurrency, selected_prompt(options));
+    let calibration_pairs = item_pairs(&calibration_entries);
+    let calibrator = Calibrator::fit(&calibration_pairs, 10);
+    let eval_raw = eval_metrics(&eval_entries, None);
+    let eval_calibrated = eval_metrics(&eval_entries, Some(&calibrator));
+    let (ab, ab_failures) = if options.ab {
+        let v1_all = call_entries(&client, &ab_items, concurrency, PromptVersion::V1);
+        let v2_all = call_entries(&client, &ab_items, concurrency, PromptVersion::V2);
+        // 配对：只比较两个提示词都成功（无 item 失败）的同一批条目，避免分母不同。
+        let paired_qids: BTreeSet<String> = v1_all
+            .iter()
+            .filter(|entry| entry.failures.is_empty())
+            .map(|entry| entry.qid.clone())
+            .collect();
+        let paired_qids: BTreeSet<String> = paired_qids
+            .into_iter()
+            .filter(|qid| {
+                v2_all
+                    .iter()
+                    .any(|entry| &entry.qid == qid && entry.failures.is_empty())
+            })
+            .collect();
+        let v1: Vec<EntryResult> = v1_all
+            .iter()
+            .filter(|entry| paired_qids.contains(&entry.qid))
+            .cloned()
+            .collect();
+        let v2: Vec<EntryResult> = v2_all
+            .iter()
+            .filter(|entry| paired_qids.contains(&entry.qid))
+            .cloned()
+            .collect();
+        let v1_metrics = eval_metrics(&v1, None);
+        let v2_metrics = eval_metrics(&v2, None);
+        let ab_failures = json!({
+            "v1": collect_entries_failures(&v1_all),
+            "v2": collect_entries_failures(&v2_all),
+            "paired_entries": paired_qids.len(),
+            "v1_raw_entries": v1_all.len(),
+            "v2_raw_entries": v2_all.len(),
+        });
+        let ab = Some(json!({
+            "n": ab_items.len(),
+            "paired_entries": paired_qids.len(),
+            "v1": v1_metrics,
+            "v2": v2_metrics,
+            "delta": {
+                "item_match_accuracy": v2_metrics["item_match_accuracy"].as_f64().unwrap_or(0.0) - v1_metrics["item_match_accuracy"].as_f64().unwrap_or(0.0),
+                "item_lenient_accuracy": v2_metrics["item_lenient_accuracy"].as_f64().unwrap_or(0.0) - v1_metrics["item_lenient_accuracy"].as_f64().unwrap_or(0.0),
+                "partial_recall": v2_metrics["partial_recall"].as_f64().unwrap_or(0.0) - v1_metrics["partial_recall"].as_f64().unwrap_or(0.0),
+                "score_exact_accuracy": v2_metrics["score_exact_accuracy"].as_f64().unwrap_or(0.0) - v1_metrics["score_exact_accuracy"].as_f64().unwrap_or(0.0),
+                "ece": v2_metrics["ece"].as_f64().unwrap_or(0.0) - v1_metrics["ece"].as_f64().unwrap_or(0.0),
+            },
+            "v2_partial_calls": v2_metrics["partial_calls"],
+            "v1_partial_calls": v1_metrics["partial_calls"],
+            "failures": ab_failures,
+        }));
+        (ab, ab_failures)
+    } else {
+        (None, Value::Null)
+    };
+    let repairs = {
+        let attempted: u64 = calibration_entries
+            .iter()
+            .chain(&eval_entries)
+            .map(|entry| entry.repair_attempted)
+            .sum();
+        let succeeded: u64 = calibration_entries
+            .iter()
+            .chain(&eval_entries)
+            .map(|entry| entry.repair_succeeded)
+            .sum();
+        let failed: u64 = calibration_entries
+            .iter()
+            .chain(&eval_entries)
+            .map(|entry| entry.repair_failed)
+            .sum();
+        json!({
+            "attempted": attempted,
+            "succeeded": succeeded,
+            "failed": failed,
+            "success_rate": if attempted == 0 { 1.0 } else { succeeded as f64 / attempted as f64 },
+        })
+    };
+    let retries = {
+        let attempted: u64 = calibration_entries
+            .iter()
+            .chain(&eval_entries)
+            .map(|entry| entry.transport_retries)
+            .sum();
+        let succeeded: u64 = calibration_entries
+            .iter()
+            .chain(&eval_entries)
+            .map(|entry| entry.transport_retry_succeeded)
+            .sum();
+        let failed: u64 = calibration_entries
+            .iter()
+            .chain(&eval_entries)
+            .map(|entry| entry.transport_retry_failed)
+            .sum();
+        json!({
+            "attempted": attempted,
+            "succeeded": succeeded,
+            "failed": failed,
+            "success_rate": if attempted == 0 { 1.0 } else { succeeded as f64 / attempted as f64 },
+        })
+    };
+    let mut failures = collect_failures(&calibration_entries, &eval_entries);
+    if options.ab {
+        failures["ab"] = ab_failures;
+    }
+    let mut warnings = vec![
+        "gold expected 为合成规则标签，非真实教师标注；校准/eval 拆分固定 seed 但样本小，指标仅作基线".to_owned(),
+        "模型未提供 calibration_id：校准表 ID 仅写入 eval 输出/报告；JudgeOutcome/grade 结构接入需规范扩展".to_owned(),
+    ];
+    if eval_calibrated["ece"].as_f64().unwrap_or(0.0) >= eval_raw["ece"].as_f64().unwrap_or(0.0) {
+        warnings.push(
+            "校准未降低 eval ECE（可能为样本小/校准集与 eval 分布偏移），如实保留未调参结果"
+                .to_owned(),
+        );
+    }
+    if let Some(ab) = &ab {
+        let v2_failures = ab
+            .pointer("/failures/v2")
+            .and_then(|value| value.get("by_kind"))
+            .and_then(Value::as_object)
+            .map_or(0, |kinds| {
+                kinds.values().filter_map(Value::as_u64).sum::<u64>()
+            });
+        if v2_failures > 0 {
+            warnings.push(format!(
+                "v2 有 {v2_failures} 次请求失败（schema/timeout），A/B 仅对 {} 条双方成功条目配对比较",
+                ab.pointer("/paired_entries").and_then(Value::as_u64).unwrap_or(0)
+            ));
+        }
+    }
+    if ab.as_ref().is_some_and(|ab| {
+        ab.pointer("/v2/mismatch_to_match")
+            .and_then(Value::as_u64)
+            .unwrap_or(0)
+            > 0
+    }) {
+        warnings.push(
+            "v2 出现 mismatch→match（错答给对），不满足「必须 0」要求，A/B 判无效".to_owned(),
+        );
+    }
+    if concurrency > 1 {
+        warnings.push(format!(
+            "并发={concurrency}：延迟含排队/竞争，与串行不可直接比较"
+        ));
+    }
+    let tokens = token_totals(&calibration_entries, &eval_entries);
+    let samples = eval_entries
+        .iter()
+        .filter(|entry| entry.failures.is_empty())
+        .take(40)
+        .map(|entry| {
+            json!({
+                "qid": entry.qid,
+                "perturbation": entry.perturbation,
+                "expected_score": entry.expected_score,
+                "actual_score": entry.actual_score,
+                "expected_judgement": entry.expected_judgement,
+                "actual_judgement": entry.actual_judgement,
+                "raw_confidence": entry.confidence,
+                "calibrated_confidence": calibrator.calibrate(entry.confidence),
+                "calibration_id": CALIBRATION_ID,
+            })
+        })
+        .collect();
+    let report = CalibratedReport {
+        service: json!({
+            "endpoint": options.endpoint,
+            "model": options.model,
+            "temperature": 0,
+            "max_tokens": 256,
+            "stream": false,
+            "response_format": "json_object",
+            "timeout_secs": options.timeout.as_secs(),
+            "concurrency": concurrency,
+            "quantization": "Q4_K_M",
+            "engine": "llama.cpp / llama-server",
+            "build_info": props.as_ref().and_then(|value| value.get("build_info")).and_then(Value::as_str).unwrap_or("unknown"),
+            "server_slots": props.as_ref().and_then(|value| value.get("total_slots")).and_then(Value::as_u64).unwrap_or(0),
+            "prompt_versions": ["v1", "v2"],
+        }),
+        split: json!({
+            "seed": SEED,
+            "method": "stratified perturbation×status；calibration/eval/ab 互斥",
+            "eligible": dataset.items.iter().filter(|item| item.expected.route == "rubric_itemized").count(),
+            "calibration": calibration_items.len(),
+            "eval": eval_items.len(),
+            "ab": ab_items.len(),
+            "skipped_manual": skipped_manual,
+            "prompt_version": prompt_version_label(selected_prompt(options)),
+        }),
+        calibration: json!({
+            "id": CALIBRATION_ID,
+            "method": "equal-frequency bins (10) + PAV monotone pooling",
+            "fit_items": calibration_pairs.len(),
+            "bins": calibrator.bins.len(),
+            "table": calibrator.bins.iter().map(|bin| json!({
+                "lower": bin.lower,
+                "upper": bin.upper,
+                "n": bin.count,
+                "accuracy": bin.accuracy,
+            })).collect::<Vec<_>>(),
+            "reliability_calibration": calibrator.reliability_table(&calibration_pairs),
+        }),
+        eval: {
+            let eval_pairs = item_pairs(&eval_entries);
+            json!({
+                "n": eval_items.len(),
+                "item_pairs": eval_pairs.len(),
+                "raw": eval_raw,
+                "calibrated": eval_calibrated,
+                "calibration_id": CALIBRATION_ID,
+                "method": "equal-frequency bins (10) + PAV monotone pooling",
+                "reliability_before": calibrator.reliability_table(&eval_pairs),
+                "reliability_after": calibrator.reliability_table_after(&eval_pairs),
+                "ece_raw": ece_value(&eval_pairs),
+                "ece_calibrated": ece_value(&eval_pairs.iter().map(|(confidence, correct)| (calibrator.calibrate(*confidence), *correct)).collect::<Vec<_>>()),
+                "brier_raw": brier_value(&eval_pairs),
+                "brier_calibrated": brier_value(&eval_pairs.iter().map(|(confidence, correct)| (calibrator.calibrate(*confidence), *correct)).collect::<Vec<_>>()),
+            })
+        },
+        ab,
+        failures,
+        repairs,
+        retries,
+        duration_ms: 0,
+        tokens,
+        warnings,
+        gold_hash: hash,
+        samples,
+    };
+    let mut report = report;
+    report.duration_ms = started.elapsed().as_millis();
+    Ok(report)
+}
+
+fn item_pairs(entries: &[EntryResult]) -> Vec<(f64, bool)> {
+    entries
+        .iter()
+        .filter(|entry| entry.failures.is_empty())
+        .flat_map(|entry| entry.ece_pairs.iter().copied())
+        .collect()
+}
+
+fn eval_metrics(entries: &[EntryResult], calibrator: Option<&Calibrator>) -> Value {
+    let successful: Vec<&EntryResult> = entries
+        .iter()
+        .filter(|entry| entry.failures.is_empty())
+        .collect();
+    let mut scored = 0usize;
+    let mut score_ok = 0usize;
+    let mut half_ok = 0usize;
+    let mut status_ok = 0usize;
+    let mut item_total = 0usize;
+    let mut item_match_ok = 0usize;
+    let mut item_lenient_ok = 0usize;
+    let mut partial_expected = 0usize;
+    let mut partial_recalled = 0usize;
+    let mut mismatch_expected = 0usize;
+    let mut mismatch_to_match = 0usize;
+    let mut partial_calls = 0usize;
+    let mut pairs = Vec::new();
+    let mut confusion: BTreeMap<String, BTreeMap<String, u64>> = BTreeMap::new();
+    for entry in successful {
+        scored += 1;
+        if entry.actual_score == entry.expected_score {
+            score_ok += 1;
+        }
+        if entry.actual_score.abs_diff(entry.expected_score)
+            <= u64::try_from((entry.max_score / 2).max(1)).unwrap_or(0)
+        {
+            half_ok += 1;
+        }
+        item_total += entry.item_total;
+        item_match_ok += entry.item_match_ok;
+        item_lenient_ok += entry
+            .observations
+            .iter()
+            .filter(|(expected, _, judgement, _)| {
+                if *expected {
+                    judgement == "match" || judgement == "partial"
+                } else {
+                    judgement == "mismatch"
+                }
+            })
+            .count();
+        partial_calls += entry.partial_calls;
+        if entry.expected_judgement == "partial" {
+            partial_expected += 1;
+            if entry.actual_judgement == "partial" {
+                partial_recalled += 1;
+            }
+        }
+        if entry.expected_judgement == "mismatch" {
+            mismatch_expected += 1;
+            if entry.actual_judgement == "match" {
+                mismatch_to_match += 1;
+            }
+        }
+        let calibrated_confidence =
+            calibrator.map_or(entry.confidence, |cal| cal.calibrate(entry.confidence));
+        let status = if calibrator.is_some() {
+            if calibrated_confidence >= 0.80 {
+                "auto_accept"
+            } else {
+                "needs_review"
+            }
+        } else {
+            "needs_review"
+        };
+        if status == entry.expected_status {
+            status_ok += 1;
+        }
+        pairs.extend(entry.ece_pairs.iter().map(|(confidence, correct)| {
+            let mapped = calibrator.map_or(*confidence, |cal| cal.calibrate(*confidence));
+            (mapped, *correct)
+        }));
+        confusion
+            .entry(entry.expected_judgement.clone())
+            .or_default()
+            .entry(entry.actual_judgement.clone())
+            .and_modify(|count| *count += 1)
+            .or_insert(1);
+    }
+    let ece = ece_value(&pairs);
+    let brier = brier_value(&pairs);
+    json!({
+        "scored_entries": scored,
+        "score_exact_accuracy": ratio(score_ok, scored),
+        "within_half_accuracy": ratio(half_ok, scored),
+        "status_consistency": ratio(status_ok, scored),
+        "item_total": item_total,
+        "item_match_accuracy": ratio(item_match_ok, item_total),
+        "item_lenient_accuracy": ratio(item_lenient_ok, item_total),
+        "item_match_ok": item_match_ok,
+        "item_lenient_ok": item_lenient_ok,
+        "partial_calls": partial_calls,
+        "partial_expected_entries": partial_expected,
+        "partial_recalled_entries": partial_recalled,
+        "partial_recall": ratio(partial_recalled, partial_expected),
+        "mismatch_expected_entries": mismatch_expected,
+        "mismatch_to_match": mismatch_to_match,
+        "ece": ece,
+        "brier": brier,
+        "confusion_matrix": confusion,
+    })
+}
+
+fn ece_value(pairs: &[(f64, bool)]) -> f64 {
+    if pairs.is_empty() {
+        return 0.0;
+    }
+    let mut bins = [(0u64, 0u64, 0.0f64); 10];
+    for (confidence, correct) in pairs {
+        let index = ((confidence.clamp(0.0, 0.999_999) * 10.0) as usize).min(9);
+        bins[index].0 += 1;
+        if *correct {
+            bins[index].1 += 1;
+        }
+        bins[index].2 += confidence;
+    }
+    let total = pairs.len() as f64;
+    bins.iter()
+        .filter(|(count, _, _)| *count > 0)
+        .map(|(count, correct, sum)| {
+            let n = *count as f64;
+            n / total * ((*correct as f64 / n) - (*sum / n)).abs()
+        })
+        .sum()
+}
+
+fn brier_value(pairs: &[(f64, bool)]) -> f64 {
+    if pairs.is_empty() {
+        return 0.0;
+    }
+    pairs
+        .iter()
+        .map(|(confidence, correct)| {
+            let truth = if *correct { 1.0 } else { 0.0 };
+            (confidence - truth).powi(2)
+        })
+        .sum::<f64>()
+        / pairs.len() as f64
+}
+
+fn token_totals(calibration: &[EntryResult], eval: &[EntryResult]) -> Value {
+    let mut prompt = 0u64;
+    let mut completion = 0u64;
+    let mut calls = 0u64;
+    for entry in calibration.iter().chain(eval) {
+        prompt += entry.prompt_tokens;
+        completion += entry.completion_tokens;
+        calls += u64::try_from(entry.call_latencies.len()).unwrap_or(0);
+    }
+    json!({"prompt_total": prompt, "completion_total": completion, "total": prompt + completion, "calls": calls})
+}
+
+fn collect_entries_failures(entries: &[EntryResult]) -> Value {
+    let mut by_kind: BTreeMap<String, u64> = BTreeMap::new();
+    let mut samples = Vec::new();
+    for entry in entries {
+        for failure in &entry.failures {
+            *by_kind.entry(failure.kind.clone()).or_default() += 1;
+            if samples.len() < 20 {
+                samples.push(failure.clone());
+            }
+        }
+    }
+    json!({"by_kind": by_kind, "samples": samples})
+}
+
+fn collect_failures(calibration: &[EntryResult], eval: &[EntryResult]) -> Value {
+    let mut by_kind: BTreeMap<String, u64> = BTreeMap::new();
+    let mut samples = Vec::new();
+    for entry in calibration.iter().chain(eval) {
+        for failure in &entry.failures {
+            *by_kind.entry(failure.kind.clone()).or_default() += 1;
+            if samples.len() < 40 {
+                samples.push(failure.clone());
+            }
+        }
+    }
+    json!({"by_kind": by_kind, "samples": samples})
+}
+
+// ---------------------------------------------------------------------------
 // HTTP（仅 http://127.0.0.1；无 TLS/鉴权；std 实现，无新增依赖）
 // ---------------------------------------------------------------------------
 
@@ -883,6 +1883,16 @@ fn fetch_props(endpoint: &str) -> Option<Value> {
     serde_json::from_str(body.trim()).ok()
 }
 
+/// 识别「partial 缺 satisfied/missing」这一类可机械修复的 Schema 违规。
+fn is_partial_missing_lists(detail: &str) -> bool {
+    detail.contains("partial 判定必须至少给出一个 satisfied 或 missing 项")
+}
+
+/// 仅 timeout/连接重置/断开类错误可重试；schema/HTTP 状态错误不重试。
+fn is_transient(error: &JudgeError) -> bool {
+    matches!(error.kind, FailureKind::Timeout | FailureKind::Transport)
+}
+
 struct JudgeClient {
     host: String,
     port: u16,
@@ -898,6 +1908,10 @@ struct JudgeResponse {
     prompt_tokens: u64,
     completion_tokens: u64,
     calibration_present: bool,
+    repair_attempted: bool,
+    repair_succeeded: bool,
+    transport_retried: bool,
+    transport_succeeded: bool,
 }
 
 #[derive(Debug)]
@@ -935,8 +1949,108 @@ impl JudgeClient {
         })
     }
 
+    /// 瞬态错误（超时/连接重置）→ 退避 500ms 后重试 1 次；schema_violation 不在此路径重试。
+    fn call_with_transient_retry(
+        &self,
+        prompt: &str,
+        max_score: MilliScore,
+    ) -> Result<(JudgeOutput, u64, u64, bool), JudgeError> {
+        match self.call_once(prompt, max_score) {
+            Ok(result) => Ok((result.0, result.1, result.2, false)),
+            Err(error) if is_transient(&error) => {
+                std::thread::sleep(Duration::from_millis(500));
+                match self.call_once(prompt, max_score) {
+                    Ok(result) => Ok((result.0, result.1, result.2, true)),
+                    Err(second) => Err(JudgeError {
+                        kind: second.kind,
+                        detail: format!(
+                            "瞬态错误重试 1 次仍失败：首次={}；重试={}",
+                            error.detail, second.detail
+                        ),
+                    }),
+                }
+            }
+            Err(error) => Err(error),
+        }
+    }
+
     fn judge(&self, prompt: &str, max_score: MilliScore) -> Result<JudgeResponse, JudgeError> {
         let started = Instant::now();
+        let (
+            output,
+            prompt_tokens,
+            completion_tokens,
+            repair_attempted,
+            repair_succeeded,
+            transport_retried,
+            transport_succeeded,
+        ) = match self.call_with_transient_retry(prompt, max_score) {
+            Ok((output, prompt_tokens, completion_tokens, retried)) => (
+                output,
+                prompt_tokens,
+                completion_tokens,
+                false,
+                false,
+                retried,
+                retried,
+            ),
+            Err(error)
+                if error.kind == FailureKind::SchemaViolation
+                    && is_partial_missing_lists(&error.detail) =>
+            {
+                // 机械修复：只反馈违规字段并允许一次重试；严格校验不变（仍失败计入失败）。
+                let repair_prompt = format!(
+                    "{prompt}\n\n上一次输出违反 Schema：{}。请修正并只输出 JSON：若 judgement 为 partial，satisfied 与 missing 必须都是非空数组（写出满足/缺失要素）；若无法给出列表，请输出 match 或 mismatch。",
+                    error.detail
+                );
+                match self.call_with_transient_retry(&repair_prompt, max_score) {
+                    Ok((output, prompt_tokens, completion_tokens, retried)) => (
+                        output,
+                        prompt_tokens,
+                        completion_tokens,
+                        true,
+                        true,
+                        retried,
+                        retried,
+                    ),
+                    Err(second) => {
+                        return Err(JudgeError {
+                            kind: second.kind,
+                            detail: format!(
+                                "partial schema 违规且 1 次修复重试仍失败：首次={}；重试={}",
+                                error.detail, second.detail
+                            ),
+                        });
+                    }
+                }
+            }
+            Err(error) => return Err(error),
+        };
+        let elapsed = started.elapsed();
+        let judgement = match output.judgement {
+            JudgeTag::Match => "match",
+            JudgeTag::Partial => "partial",
+            JudgeTag::Mismatch => "mismatch",
+        };
+        Ok(JudgeResponse {
+            judgement: judgement.to_owned(),
+            confidence: output.confidence.get(),
+            latency_ms: elapsed.as_millis(),
+            prompt_tokens,
+            completion_tokens,
+            calibration_present: output.calibration_id.is_some(),
+            repair_attempted,
+            repair_succeeded,
+            transport_retried,
+            transport_succeeded,
+        })
+    }
+
+    fn call_once(
+        &self,
+        prompt: &str,
+        max_score: MilliScore,
+    ) -> Result<(JudgeOutput, u64, u64), JudgeError> {
         let body = json!({
             "model": self.model,
             "messages": [
@@ -950,7 +2064,6 @@ impl JudgeClient {
         })
         .to_string();
         let response = self.post(&body)?;
-        let elapsed = started.elapsed();
         let root: Value = serde_json::from_str(&response).map_err(|error| JudgeError {
             kind: FailureKind::InvalidJson,
             detail: format!("响应不是 JSON：{error}"),
@@ -984,19 +2097,7 @@ impl JudgeClient {
             .and_then(|usage| usage.get("completion_tokens"))
             .and_then(Value::as_u64)
             .unwrap_or(0);
-        let judgement = match output.judgement {
-            JudgeTag::Match => "match",
-            JudgeTag::Partial => "partial",
-            JudgeTag::Mismatch => "mismatch",
-        };
-        Ok(JudgeResponse {
-            judgement: judgement.to_owned(),
-            confidence: output.confidence.get(),
-            latency_ms: elapsed.as_millis(),
-            prompt_tokens,
-            completion_tokens,
-            calibration_present: output.calibration_id.is_some(),
-        })
+        Ok((output, prompt_tokens, completion_tokens))
     }
 
     fn post(&self, body: &str) -> Result<String, JudgeError> {
@@ -1116,6 +2217,122 @@ mod tests {
     fn decodes_chunked_body() {
         let body = "4\r\n{\"a\"\r\n3\r\n:1}\r\n0\r\n\r\n";
         assert_eq!(decode_chunked(body).unwrap(), "{\"a\":1}");
+    }
+
+    #[test]
+    fn prompt_version_selection_and_prompt_content() {
+        let v1 = Options::default();
+        assert_eq!(selected_prompt(&v1), PromptVersion::V1);
+        assert_eq!(prompt_version_label(selected_prompt(&v1)), "v1");
+        let v2 = Options {
+            prompt: PromptVersion::V2,
+            ..Options::default()
+        };
+        assert_eq!(selected_prompt(&v2), PromptVersion::V2);
+        assert_eq!(prompt_version_label(selected_prompt(&v2)), "v2");
+
+        // 不依赖服务：真实 gold 条目上生成提示词，确认 V1/V2 内容确实不同。
+        let bytes = std::fs::read(
+            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("../../fixtures/gold/solution-200.json"),
+        )
+        .unwrap();
+        let dataset: SolutionDataset = serde_json::from_slice(&bytes).unwrap();
+        let item = dataset
+            .items
+            .iter()
+            .find(|item| item.expected.route == "rubric_itemized")
+            .unwrap();
+        let rubric = item.rubric.as_ref().unwrap();
+        let criterion = rubric.items[0].criterion.as_str();
+        let points = rubric.items[0].points.as_milli();
+        let prompt_v1 = item_prompt(item, criterion, points, PromptVersion::V1);
+        let prompt_v2 = item_prompt(item, criterion, points, PromptVersion::V2);
+        assert_ne!(prompt_v1, prompt_v2, "V1/V2 提示词必须不同（接线证据）");
+        assert!(prompt_v1.contains("match 或 mismatch"));
+        assert!(prompt_v2.contains("judgement_criteria"));
+        assert!(prompt_v2.contains("partial_score_milli"));
+        assert!(!prompt_v1.contains("judgement_criteria"));
+    }
+
+    #[test]
+    fn transient_error_policy_is_limited_to_timeout_and_transport() {
+        assert!(is_transient(&JudgeError {
+            kind: FailureKind::Timeout,
+            detail: "timeout".to_owned()
+        }));
+        assert!(is_transient(&JudgeError {
+            kind: FailureKind::Transport,
+            detail: "reset".to_owned()
+        }));
+        assert!(!is_transient(&JudgeError {
+            kind: FailureKind::SchemaViolation,
+            detail: "partial".to_owned()
+        }));
+        assert!(!is_transient(&JudgeError {
+            kind: FailureKind::HttpStatus,
+            detail: "500".to_owned()
+        }));
+    }
+
+    #[test]
+    fn detects_partial_missing_list_violation() {
+        assert!(is_partial_missing_lists(
+            "partial 判定必须至少给出一个 satisfied 或 missing 项"
+        ));
+        assert!(!is_partial_missing_lists(
+            "match 判定必须给满分 5000，实际 0"
+        ));
+        assert!(!is_partial_missing_lists("transport timeout"));
+    }
+
+    #[test]
+    fn calibrator_is_monotonic_and_reduces_overconfidence() {
+        // 过自信合成数据：confidence 0.9 但仅 50% 正确。
+        let pairs: Vec<(f64, bool)> = (0..100).map(|index| (0.9, index % 2 == 0)).collect();
+        let calibrator = Calibrator::fit(&pairs, 10);
+        let mut previous = 0.0;
+        for bin in &calibrator.bins {
+            assert!(bin.accuracy + 1e-12 >= previous, "PAV 必须单调非降");
+            previous = bin.accuracy;
+        }
+        let raw = ece_value(&pairs);
+        let mapped: Vec<(f64, bool)> = pairs
+            .iter()
+            .map(|(confidence, correct)| (calibrator.calibrate(*confidence), *correct))
+            .collect();
+        let calibrated = ece_value(&mapped);
+        assert!(
+            calibrated <= raw + 1e-12,
+            "校准后 ECE 不应变差：raw={raw} cal={calibrated}"
+        );
+        assert!(
+            (calibrator.calibrate(0.9) - 0.5).abs() < 0.2,
+            "0.9 应被拉回约 0.5"
+        );
+        assert_eq!(calibrator.id(), CALIBRATION_ID);
+    }
+
+    #[test]
+    fn pav_pools_violating_bins() {
+        // 人工构造单调违例：低 confidence 桶准确率高、高 confidence 桶准确率低。
+        let pairs: Vec<(f64, bool)> = vec![
+            (0.1, true),
+            (0.2, true),
+            (0.3, true),
+            (0.4, true),
+            (0.7, false),
+            (0.8, false),
+            (0.9, false),
+            (0.95, false),
+        ];
+        let calibrator = Calibrator::fit(&pairs, 4);
+        for pair in calibrator.bins.windows(2) {
+            assert!(
+                pair[0].accuracy <= pair[1].accuracy + 1e-12,
+                "PAV 合并后必须单调"
+            );
+        }
     }
 
     #[test]
